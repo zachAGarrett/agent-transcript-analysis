@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fixtures/v1/registry.schema.json",
+  "title": "Tagging pipeline job registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "jobs"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "createdAt", "dir", "fileCount"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Job folder name, typically an ISO-like datetime stamp."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the batch job started."
+          },
+          "dir": {
+            "type": "string",
+            "description": "Path to the job folder relative to the repo root."
+          },
+          "fileCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of transcript CSV files written."
+          }
+        }
+      }
+    }
+  }
+}
