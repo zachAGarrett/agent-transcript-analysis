@@ -1,0 +1,20 @@
+{
+  "model": {
+    "review": "google/gemini-3.8-flash",
+    "analyze": "google/gemini-3.8-flash",
+    "commitMessage": "google/gemini-3.8-flash-lite"
+  },
+  "skillsDirs": [".agents/skills"],
+  "instructions": [],
+  "blockOn": ["error"],
+  "maxDiffBytes": 200000,
+  "defaultScope": "staged",
+  "outputDir": ".data/agent-review",
+  "analystConcurrency": 4,
+  "includeWorkstream": false,
+  "workstreams": {
+    "autoCommit": false,
+    "autoLink": true
+  },
+  "skip": false
+}
