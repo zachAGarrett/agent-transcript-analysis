@@ -8,3 +8,6 @@ bun run format:check
 
 echo "pre-push: Typecheck…"
 bun run typecheck
+
+echo "pre-push: Tests…"
+bun test
