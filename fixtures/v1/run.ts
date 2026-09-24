@@ -1,13 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { Encoding } from "../encoders";
 import { Pipeline } from "../pipeline";
 import { encoder } from "./encoder";
-import {
-  listParentTranscripts,
-  loadComposerSettings,
-  messagesFromTranscript,
-} from "./load";
-import type { Encoding } from "../encoders";
+import { listParentTranscripts, loadComposerSettings, messagesFromTranscript } from "./load";
 import { taxonomy } from "./taxonomy";
 
 const ROOT = join(import.meta.dir, "../..");
@@ -71,9 +67,7 @@ async function main(): Promise<void> {
   for (const transcript of transcripts) {
     const settings = loadComposerSettings(transcript.id);
     const encodings: Encoding[] = [];
-    for await (const encoding of pipeline.feed(
-      messagesFromTranscript(transcript.path, settings),
-    )) {
+    for await (const encoding of pipeline.feed(messagesFromTranscript(transcript.path, settings))) {
       if (encoding.atoms.every((atom) => atom === null)) continue;
       encodings.push(encoding);
     }

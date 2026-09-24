@@ -3,13 +3,28 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+  "scripts": {
+    "biome": "biome check .",
+    "check": "biome check .",
+    "check:write": "biome check --write .",
+    "format": "biome check --write .",
+    "format:check": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepare": "husky",
+    "agent-review": "agent-review",
+    "review": "agent-review run --scope staged --include-workstream"
   },
   "dependencies": {
     "@khoralabs/agent-review": "^0.2.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@types/bun": "latest",
+    "husky": "^9.1.7",
+    "typescript": "^5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

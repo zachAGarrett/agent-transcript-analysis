@@ -15,9 +15,7 @@ export class Pipeline<TMessage = unknown> {
     messages: AsyncIterable<TMessage> | AsyncIterator<TMessage>,
   ): AsyncGenerator<Encoding> {
     const iterable =
-      Symbol.asyncIterator in messages
-        ? messages
-        : { [Symbol.asyncIterator]: () => messages };
+      Symbol.asyncIterator in messages ? messages : { [Symbol.asyncIterator]: () => messages };
 
     for await (const message of iterable) {
       yield await this.processOne(message);

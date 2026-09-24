@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Pipeline } from "../pipeline";
 import { buildCodebook, EMPTY_SYMBOL, toBase36 } from "../encoders";
-import { encoder, encodeAtom, resolveAtom } from "./encoder";
+import { Pipeline } from "../pipeline";
 import { decoder } from "./decoder";
+import { encodeAtom, encoder, resolveAtom } from "./encoder";
+import type { Message } from "./message";
 import { encodingToCsvRow } from "./run";
 import { classifyIntent, classifyShellFamily, knownAtoms, taxonomy } from "./taxonomy";
-import type { Message } from "./message";
 
 describe("classifyIntent", () => {
   test("matches first rule", () => {
@@ -41,18 +41,12 @@ describe("encoding", () => {
   });
 
   test("compact yields one composite per row", () => {
-    const atoms = [
-      "who:user",
-      "intent:other",
-      ...Array(taxonomy.length - 2).fill(null),
-    ];
+    const atoms = ["who:user", "intent:other", ...Array(taxonomy.length - 2).fill(null)];
     const composite = encoder.compact(atoms);
     expect(composite.startsWith(`${encodeAtom("who:user")}${encodeAtom("intent:other")}`)).toBe(
       true,
     );
-    expect(composite.endsWith(EMPTY_SYMBOL.repeat(taxonomy.length - 2))).toBe(
-      true,
-    );
+    expect(composite.endsWith(EMPTY_SYMBOL.repeat(taxonomy.length - 2))).toBe(true);
     expect(decoder.decode(composite)).toEqual(atoms);
   });
 
@@ -94,9 +88,7 @@ describe("Pipeline", () => {
       "intent:plan",
       ...Array(taxonomy.length - 2).fill(null),
     ]);
-    expect(decoder.decode(encoder.compact(encoding.atoms))).toEqual(
-      encoding.atoms,
-    );
+    expect(decoder.decode(encoder.compact(encoding.atoms))).toEqual(encoding.atoms);
   });
 
   test("processOne encodes a shell tool call", async () => {
@@ -116,9 +108,7 @@ describe("Pipeline", () => {
       "sh:git",
       ...Array(taxonomy.length - 5).fill(null),
     ]);
-    expect(decoder.decode(encoder.compact(encoding.atoms))).toEqual(
-      encoding.atoms,
-    );
+    expect(decoder.decode(encoder.compact(encoding.atoms))).toEqual(encoding.atoms);
   });
 
   test("feed yields encodings in order", async () => {

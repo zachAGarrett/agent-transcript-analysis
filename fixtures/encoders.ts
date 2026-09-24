@@ -44,13 +44,9 @@ export async function encodeWithTaxonomy<TMessage>(
   message: TMessage,
   taxonomy: readonly TaxonomyEntry<TMessage>[],
 ): Promise<Encoding> {
-  const results = await Promise.all(
-    taxonomy.map((entry) => classifyEntry(message, entry)),
-  );
+  const results = await Promise.all(taxonomy.map((entry) => classifyEntry(message, entry)));
   return {
-    atoms: results.map(({ axis, value }) =>
-      value === null ? null : `${axis}:${value}`,
-    ),
+    atoms: results.map(({ axis, value }) => (value === null ? null : `${axis}:${value}`)),
   };
 }
 
@@ -59,9 +55,7 @@ export function compactAtoms(
   atoms: ReadonlyArray<Atom | null>,
   encodeAtom: (atom: Atom) => string,
 ): string {
-  return atoms
-    .map((atom) => (atom === null ? EMPTY_SYMBOL : encodeAtom(atom)))
-    .join("");
+  return atoms.map((atom) => (atom === null ? EMPTY_SYMBOL : encodeAtom(atom))).join("");
 }
 
 /** Split a composite on the trailing-dot delimiter into symbol fragments. */

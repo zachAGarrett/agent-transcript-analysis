@@ -1,8 +1,8 @@
 {
   "model": {
-    "review": "google/gemini-3.8-flash",
-    "analyze": "google/gemini-3.8-flash",
-    "commitMessage": "google/gemini-3.8-flash-lite"
+    "review": "google/gemini-3.7-flash",
+    "analyze": "google/gemini-3.7-flash",
+    "commitMessage": "google/gemini-3.7-flash"
   },
   "skillsDirs": [".agents/skills"],
   "instructions": [],

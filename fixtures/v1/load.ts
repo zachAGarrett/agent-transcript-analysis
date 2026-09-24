@@ -27,14 +27,14 @@ export type TranscriptFile = {
 };
 
 /** Parent transcript JSONL files (skips subagents/). */
-export function listParentTranscripts(
-  root = PROJECTS_ROOT,
-): TranscriptFile[] {
+export function listParentTranscripts(root = PROJECTS_ROOT): TranscriptFile[] {
   const out: TranscriptFile[] = [];
-  const projects = Array.from(new Bun.Glob("*/agent-transcripts").scanSync({
-    cwd: root,
-    onlyFiles: false,
-  }));
+  const projects = Array.from(
+    new Bun.Glob("*/agent-transcripts").scanSync({
+      cwd: root,
+      onlyFiles: false,
+    }),
+  );
 
   for (const projectRel of projects) {
     const base = join(root, projectRel);
@@ -55,10 +55,7 @@ export function listParentTranscripts(
   return out;
 }
 
-export function loadComposerSettings(
-  composerId: string,
-  dbPath = STATE_DB,
-): ComposerSettings {
+export function loadComposerSettings(composerId: string, dbPath = STATE_DB): ComposerSettings {
   const db = new Database(dbPath, { readonly: true });
   try {
     const row = db

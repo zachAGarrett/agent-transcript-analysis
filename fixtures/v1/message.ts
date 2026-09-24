@@ -2,11 +2,7 @@
  * Normalized message shapes fed into the tagging pipeline.
  * Batch runners map Cursor JSONL + composerData into these.
  */
-export type Message =
-  | SessionMessage
-  | UserMessage
-  | AgentMessage
-  | TurnEndedMessage;
+export type Message = SessionMessage | UserMessage | AgentMessage | TurnEndedMessage;
 
 export type SessionMessage = {
   kind: "session";

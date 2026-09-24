@@ -1,13 +1,13 @@
 import {
+  type Atom,
   buildCodebook,
   compactAtoms,
-  encodeWithTaxonomy,
-  type Atom,
   type Encoder,
   type Encoding,
+  encodeWithTaxonomy,
 } from "../encoders";
-import { knownAtoms, taxonomy } from "./taxonomy";
 import type { Message } from "./message";
+import { knownAtoms, taxonomy } from "./taxonomy";
 
 const codebook = buildCodebook(knownAtoms);
 
@@ -48,9 +48,7 @@ export const encoder: Encoder<Message> = {
   async encode(message: Message): Promise<Encoding> {
     const raw = await encodeWithTaxonomy(message, taxonomy);
     return {
-      atoms: raw.atoms.map((atom) =>
-        atom === null ? null : resolveAtom(atom),
-      ),
+      atoms: raw.atoms.map((atom) => (atom === null ? null : resolveAtom(atom))),
     };
   },
 };
