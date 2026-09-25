@@ -10,7 +10,7 @@ export type Atom = string;
 export const EMPTY_SYMBOL = "-.";
 
 /**
- * Terminates each compacted sequence unit so concatenated lattice macros stay
+ * Terminates each compacted sequence unit so concatenated lattice patterns stay
  * human-splittable (`unit|unit|`) without relying on fixed width alone.
  * Outside the base36 + empty alphabet.
  */

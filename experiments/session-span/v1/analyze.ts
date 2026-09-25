@@ -10,7 +10,7 @@ export type DecodedPath = {
   tokens: string[];
 };
 
-export type MacroEntry = {
+export type PatternEntry = {
   token: string;
   length: number;
   count: number;
@@ -19,15 +19,15 @@ export type MacroEntry = {
 };
 
 export type DecoderAnalysis = {
-  macrosByHub: MacroEntry[];
-  macrosByFrequency: MacroEntry[];
+  patternsByHub: PatternEntry[];
+  patternsByFrequency: PatternEntry[];
   crossTurnShare: number;
   meanCompression: number;
   examples: Array<{
     id: string;
     symbolCount: number;
     tokenCount: number;
-    macros: string[];
+    patterns: string[];
   }>;
 };
 
@@ -42,7 +42,7 @@ export type AnalysisReport = {
   viterbi: DecoderAnalysis;
   beam: DecoderAnalysis;
   comparison: {
-    topMacroJaccard: number;
+    topPatternJaccard: number;
     divergentSequenceCount: number;
   };
 };
@@ -100,7 +100,7 @@ function analyzeDecoder(
   exampleLimit: number,
 ): DecoderAnalysis {
   const freq = new Map<string, number>();
-  let macroOccurrences = 0;
+  let patternOccurrences = 0;
   let crossTurnOccurrences = 0;
   let compressionSum = 0;
   let compressionN = 0;
@@ -118,14 +118,14 @@ function analyzeDecoder(
         continue;
       }
       if (length <= 1) continue;
-      macroOccurrences += 1;
+      patternOccurrences += 1;
       freq.set(token, (freq.get(token) ?? 0) + 1);
       const atoms = tokenToAtomSteps(token);
       if (crossesTurn(atoms)) crossTurnOccurrences += 1;
     }
   }
 
-  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => ({
+  const toEntry = (token: string, count: number, hubScore?: number): PatternEntry => ({
     token,
     length: tokenLength(token),
     count,
@@ -133,12 +133,12 @@ function analyzeDecoder(
     crossesTurn: crossesTurn(tokenToAtomSteps(token)),
   });
 
-  const macrosByFrequency = [...freq.entries()]
+  const patternsByFrequency = [...freq.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, topK)
     .map(([token, count]) => toEntry(token, count, hubScores.get(token)));
 
-  const macrosByHub = [...hubScores.entries()]
+  const patternsByHub = [...hubScores.entries()]
     .filter(([token]) => {
       try {
         return tokenLength(token) > 1;
@@ -154,7 +154,7 @@ function analyzeDecoder(
     id: path.id,
     symbolCount: path.symbols.length,
     tokenCount: path.tokens.length,
-    macros: path.tokens.filter((token) => {
+    patterns: path.tokens.filter((token) => {
       try {
         return tokenLength(token) > 1;
       } catch {
@@ -164,9 +164,9 @@ function analyzeDecoder(
   }));
 
   return {
-    macrosByHub,
-    macrosByFrequency,
-    crossTurnShare: macroOccurrences === 0 ? 0 : crossTurnOccurrences / macroOccurrences,
+    patternsByHub,
+    patternsByFrequency,
+    crossTurnShare: patternOccurrences === 0 ? 0 : crossTurnOccurrences / patternOccurrences,
     meanCompression: compressionN === 0 ? 0 : compressionSum / compressionN,
     examples,
   };
@@ -189,8 +189,8 @@ export function analyze(args: {
   const viterbi = analyzeDecoder(args.viterbiPaths, hubScores, topK, 5);
   const beam = analyzeDecoder(args.beamPaths, hubScores, topK, 5);
 
-  const vSet = new Set(viterbi.macrosByFrequency.map((m) => m.token));
-  const bSet = new Set(beam.macrosByFrequency.map((m) => m.token));
+  const vSet = new Set(viterbi.patternsByFrequency.map((m) => m.token));
+  const bSet = new Set(beam.patternsByFrequency.map((m) => m.token));
 
   let divergent = 0;
   const beamById = new Map(args.beamPaths.map((p) => [p.id, p]));
@@ -211,7 +211,7 @@ export function analyze(args: {
     viterbi,
     beam,
     comparison: {
-      topMacroJaccard: jaccard(vSet, bSet),
+      topPatternJaccard: jaccard(vSet, bSet),
       divergentSequenceCount: divergent,
     },
   };
@@ -219,7 +219,7 @@ export function analyze(args: {
 
 /** Pretty-print the analysis summary for the smoke gate / CLI. */
 export function printAnalysis(report: AnalysisReport): void {
-  const fmt = (entries: MacroEntry[]) =>
+  const fmt = (entries: PatternEntry[]) =>
     entries
       .slice(0, 10)
       .map((m, i) => {
@@ -233,22 +233,22 @@ export function printAnalysis(report: AnalysisReport): void {
   console.log(`vocabularySize=${report.lattice.vocabularySize}`);
   console.log(`train=${report.job.trainCount} heldOut=${report.job.heldOutCount}`);
   console.log(`latticeDb=${report.job.latticeDb}`);
-  console.log("\n--- Viterbi macros by hub ---");
-  console.log(fmt(report.viterbi.macrosByHub) || "  (none)");
-  console.log("\n--- Viterbi macros by frequency ---");
-  console.log(fmt(report.viterbi.macrosByFrequency) || "  (none)");
+  console.log("\n--- Viterbi patterns by hub ---");
+  console.log(fmt(report.viterbi.patternsByHub) || "  (none)");
+  console.log("\n--- Viterbi patterns by frequency ---");
+  console.log(fmt(report.viterbi.patternsByFrequency) || "  (none)");
   console.log(
     `\nViterbi crossTurnShare=${report.viterbi.crossTurnShare.toFixed(3)} compression=${report.viterbi.meanCompression.toFixed(3)}`,
   );
-  console.log("\n--- Beam macros by hub ---");
-  console.log(fmt(report.beam.macrosByHub) || "  (none)");
-  console.log("\n--- Beam macros by frequency ---");
-  console.log(fmt(report.beam.macrosByFrequency) || "  (none)");
+  console.log("\n--- Beam patterns by hub ---");
+  console.log(fmt(report.beam.patternsByHub) || "  (none)");
+  console.log("\n--- Beam patterns by frequency ---");
+  console.log(fmt(report.beam.patternsByFrequency) || "  (none)");
   console.log(
     `\nBeam crossTurnShare=${report.beam.crossTurnShare.toFixed(3)} compression=${report.beam.meanCompression.toFixed(3)}`,
   );
   console.log(
-    `\ncomparison jaccard=${report.comparison.topMacroJaccard.toFixed(3)} divergent=${report.comparison.divergentSequenceCount}`,
+    `\ncomparison jaccard=${report.comparison.topPatternJaccard.toFixed(3)} divergent=${report.comparison.divergentSequenceCount}`,
   );
 }
 

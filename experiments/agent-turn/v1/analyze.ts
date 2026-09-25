@@ -11,32 +11,32 @@ export type DecodedPath = {
   tokens: string[];
 };
 
-export type MacroEntry = {
+export type PatternEntry = {
   token: string;
   length: number;
   count: number;
   hubScore?: number;
 };
 
-export type IntentMacroPair = {
+export type IntentPatternPair = {
   intent: string;
-  macro: string;
+  pattern: string;
   count: number;
 };
 
 export type DecoderAnalysis = {
-  macrosByHub: MacroEntry[];
-  macrosByFrequency: MacroEntry[];
+  patternsByHub: PatternEntry[];
+  patternsByFrequency: PatternEntry[];
   meanCompression: number;
-  /** Share of macros that incorrectly contain who:user (should be ~0). */
+  /** Share of patterns that incorrectly contain who:user (should be ~0). */
   userAtomLeakShare: number;
-  intentToMacros: IntentMacroPair[];
+  intentToPatterns: IntentPatternPair[];
   examples: Array<{
     id: string;
     intent: string | null;
     symbolCount: number;
     tokenCount: number;
-    macros: string[];
+    patterns: string[];
   }>;
 };
 
@@ -51,7 +51,7 @@ export type AnalysisReport = {
   viterbi: DecoderAnalysis;
   beam: DecoderAnalysis;
   comparison: {
-    topMacroJaccard: number;
+    topPatternJaccard: number;
     divergentSequenceCount: number;
   };
 };
@@ -98,8 +98,8 @@ function analyzeDecoder(
   topK: number,
 ): DecoderAnalysis {
   const freq = new Map<string, number>();
-  const intentMacro = new Map<string, number>();
-  let macroOccurrences = 0;
+  const intentPattern = new Map<string, number>();
+  let patternOccurrences = 0;
   let userLeakOccurrences = 0;
   let compressionSum = 0;
   let compressionN = 0;
@@ -117,30 +117,30 @@ function analyzeDecoder(
         continue;
       }
       if (length <= 1) continue;
-      macroOccurrences += 1;
+      patternOccurrences += 1;
       freq.set(token, (freq.get(token) ?? 0) + 1);
       const atoms = tokenToAtomSteps(token);
       if (hasUserAtom(atoms)) userLeakOccurrences += 1;
       if (path.intent) {
         const key = `${path.intent}\0${token}`;
-        intentMacro.set(key, (intentMacro.get(key) ?? 0) + 1);
+        intentPattern.set(key, (intentPattern.get(key) ?? 0) + 1);
       }
     }
   }
 
-  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => ({
+  const toEntry = (token: string, count: number, hubScore?: number): PatternEntry => ({
     token,
     length: tokenLength(token),
     count,
     hubScore,
   });
 
-  const macrosByFrequency = [...freq.entries()]
+  const patternsByFrequency = [...freq.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, topK)
     .map(([token, count]) => toEntry(token, count, hubScores.get(token)));
 
-  const macrosByHub = [...hubScores.entries()]
+  const patternsByHub = [...hubScores.entries()]
     .filter(([token]) => {
       try {
         return tokenLength(token) > 1;
@@ -152,10 +152,10 @@ function analyzeDecoder(
     .slice(0, topK)
     .map(([token, hubScore]) => toEntry(token, freq.get(token) ?? 0, hubScore));
 
-  const intentToMacros: IntentMacroPair[] = [...intentMacro.entries()]
+  const intentToPatterns: IntentPatternPair[] = [...intentPattern.entries()]
     .map(([key, count]) => {
-      const [intent, macro] = key.split("\0") as [string, string];
-      return { intent, macro, count };
+      const [intent, pattern] = key.split("\0") as [string, string];
+      return { intent, pattern, count };
     })
     .sort((a, b) => b.count - a.count || a.intent.localeCompare(b.intent))
     .slice(0, topK);
@@ -165,7 +165,7 @@ function analyzeDecoder(
     intent: path.intent,
     symbolCount: path.symbols.length,
     tokenCount: path.tokens.length,
-    macros: path.tokens.filter((token) => {
+    patterns: path.tokens.filter((token) => {
       try {
         return tokenLength(token) > 1;
       } catch {
@@ -175,11 +175,11 @@ function analyzeDecoder(
   }));
 
   return {
-    macrosByHub,
-    macrosByFrequency,
+    patternsByHub,
+    patternsByFrequency,
     meanCompression: compressionN === 0 ? 0 : compressionSum / compressionN,
-    userAtomLeakShare: macroOccurrences === 0 ? 0 : userLeakOccurrences / macroOccurrences,
-    intentToMacros,
+    userAtomLeakShare: patternOccurrences === 0 ? 0 : userLeakOccurrences / patternOccurrences,
+    intentToPatterns,
     examples,
   };
 }
@@ -200,8 +200,8 @@ export function analyze(args: {
   const viterbi = analyzeDecoder(args.viterbiPaths, hubScores, topK);
   const beam = analyzeDecoder(args.beamPaths, hubScores, topK);
 
-  const vSet = new Set(viterbi.macrosByFrequency.map((m) => m.token));
-  const bSet = new Set(beam.macrosByFrequency.map((m) => m.token));
+  const vSet = new Set(viterbi.patternsByFrequency.map((m) => m.token));
+  const bSet = new Set(beam.patternsByFrequency.map((m) => m.token));
 
   let divergent = 0;
   const beamById = new Map(args.beamPaths.map((p) => [p.id, p]));
@@ -222,14 +222,14 @@ export function analyze(args: {
     viterbi,
     beam,
     comparison: {
-      topMacroJaccard: jaccard(vSet, bSet),
+      topPatternJaccard: jaccard(vSet, bSet),
       divergentSequenceCount: divergent,
     },
   };
 }
 
 export function printAnalysis(report: AnalysisReport): void {
-  const fmtMacros = (entries: MacroEntry[]) =>
+  const fmtPatterns = (entries: PatternEntry[]) =>
     entries
       .slice(0, 10)
       .map((m, i) => {
@@ -245,28 +245,30 @@ export function printAnalysis(report: AnalysisReport): void {
       })
       .join("\n");
 
-  const fmtPairs = (pairs: IntentMacroPair[]) =>
+  const fmtPairs = (pairs: IntentPatternPair[]) =>
     pairs
       .slice(0, 10)
-      .map((p, i) => `  ${i + 1}. intent=${p.intent} count=${p.count} len=${tokenLength(p.macro)}`)
+      .map(
+        (p, i) => `  ${i + 1}. intent=${p.intent} count=${p.count} len=${tokenLength(p.pattern)}`,
+      )
       .join("\n");
 
   console.log(`vocabularySize=${report.lattice.vocabularySize}`);
   console.log(`train=${report.job.trainCount} heldOut=${report.job.heldOutCount}`);
   console.log(`latticeDb=${report.job.latticeDb}`);
-  console.log("\n--- Viterbi macros by hub ---");
-  console.log(fmtMacros(report.viterbi.macrosByHub) || "  (none)");
-  console.log("\n--- Viterbi macros by frequency ---");
-  console.log(fmtMacros(report.viterbi.macrosByFrequency) || "  (none)");
-  console.log("\n--- Viterbi intent → macro ---");
-  console.log(fmtPairs(report.viterbi.intentToMacros) || "  (none)");
+  console.log("\n--- Viterbi patterns by hub ---");
+  console.log(fmtPatterns(report.viterbi.patternsByHub) || "  (none)");
+  console.log("\n--- Viterbi patterns by frequency ---");
+  console.log(fmtPatterns(report.viterbi.patternsByFrequency) || "  (none)");
+  console.log("\n--- Viterbi intent → pattern ---");
+  console.log(fmtPairs(report.viterbi.intentToPatterns) || "  (none)");
   console.log(
     `\nViterbi compression=${report.viterbi.meanCompression.toFixed(3)} userAtomLeak=${report.viterbi.userAtomLeakShare.toFixed(3)}`,
   );
-  console.log("\n--- Beam macros by frequency ---");
-  console.log(fmtMacros(report.beam.macrosByFrequency) || "  (none)");
+  console.log("\n--- Beam patterns by frequency ---");
+  console.log(fmtPatterns(report.beam.patternsByFrequency) || "  (none)");
   console.log(
-    `\ncomparison jaccard=${report.comparison.topMacroJaccard.toFixed(3)} divergent=${report.comparison.divergentSequenceCount}`,
+    `\ncomparison jaccard=${report.comparison.topPatternJaccard.toFixed(3)} divergent=${report.comparison.divergentSequenceCount}`,
   );
 }
 

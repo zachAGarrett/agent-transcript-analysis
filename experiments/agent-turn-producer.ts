@@ -55,7 +55,7 @@ export function splitAgentTurns(session: Sequence): Sequence[] {
 }
 
 /**
- * Producer that yields one sequence per agent turn (macros stay inside the turn).
+ * Producer that yields one sequence per agent turn (patterns stay inside the turn).
  * Intent from the preceding user message is in `meta.intent`, not in `symbols`.
  */
 export class AgentTurnProducer implements Producer {
