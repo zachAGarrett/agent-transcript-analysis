@@ -5,6 +5,7 @@ import {
   collectPaths,
   printAnalysis,
 } from "@/experiments/session-span/v1/analyze";
+import { renderCharts } from "@/experiments/session-span/v1/charts";
 import type { ExperimentDefinition } from "@/experiments/types";
 
 export const experiment: ExperimentDefinition = {
@@ -31,6 +32,7 @@ export const experiment: ExperimentDefinition = {
   printAnalysis(report) {
     printAnalysis(report as AnalysisReport);
   },
+  renderCharts,
 };
 
 export default experiment;

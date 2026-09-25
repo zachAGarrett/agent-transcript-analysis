@@ -4,6 +4,7 @@ import {
   collectPaths,
   printAnalysis,
 } from "@/experiments/agent-turn/v1/analyze";
+import { renderCharts } from "@/experiments/agent-turn/v1/charts";
 import { AgentTurnProducer } from "@/experiments/agent-turn-producer";
 import type { ExperimentDefinition } from "@/experiments/types";
 
@@ -31,6 +32,7 @@ export const experiment: ExperimentDefinition = {
   printAnalysis(report) {
     printAnalysis(report as AnalysisReport);
   },
+  renderCharts,
 };
 
 export default experiment;

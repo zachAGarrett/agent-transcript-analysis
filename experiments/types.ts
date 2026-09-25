@@ -34,6 +34,8 @@ export type ExperimentDefinition = {
   createProducer: (opts: { paths: string[] }) => Producer;
   buildReport: (ctx: BuildReportContext) => unknown;
   printAnalysis: (report: unknown) => void;
+  /** Build self-contained HTML for a report.json of this experiment. */
+  renderCharts: (report: unknown, opts: { sourcePath: string }) => string;
 };
 
 export type RunJobOptions = {
