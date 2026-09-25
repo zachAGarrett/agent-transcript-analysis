@@ -1,0 +1,11 @@
+{
+  "version": "v1",
+  "jobs": [
+    {
+      "id": "2026-09-25T00-27-56Z",
+      "createdAt": "2026-09-25T00:27:56.694Z",
+      "dir": "experiments/session-span/v1/2026-09-25T00-27-56Z",
+      "fileCount": 1
+    }
+  ]
+}

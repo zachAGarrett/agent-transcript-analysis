@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiments/session-span/v1/registry.schema.json",
+  "title": "Session-span experiment job registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "jobs"],
+  "properties": {
+    "version": { "type": "string", "const": "v1" },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "createdAt", "dir", "fileCount"],
+        "properties": {
+          "id": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "dir": { "type": "string" },
+          "fileCount": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
