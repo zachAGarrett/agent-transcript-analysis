@@ -1,16 +1,8 @@
 /**
  * Normalized message shapes fed into the tagging pipeline.
- * Batch runners map Cursor JSONL + composerData into these.
+ * Batch runners map Cursor transcript JSONL into these.
  */
-export type Message = SessionMessage | UserMessage | AgentMessage | TurnEndedMessage;
-
-export type SessionMessage = {
-  kind: "session";
-  model: string;
-  mode: string;
-  force: string;
-  max: "0" | "1";
-};
+export type Message = UserMessage | AgentMessage | TurnEndedMessage;
 
 export type UserMessage = {
   kind: "user";

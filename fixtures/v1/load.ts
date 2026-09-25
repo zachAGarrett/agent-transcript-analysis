@@ -1,25 +1,8 @@
-import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "./message";
 
 const PROJECTS_ROOT = join(homedir(), ".cursor", "projects");
-const STATE_DB = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "Cursor",
-  "User",
-  "globalStorage",
-  "state.vscdb",
-);
-
-export type ComposerSettings = {
-  model: string;
-  mode: string;
-  force: string;
-  max: "0" | "1";
-};
 
 export type TranscriptFile = {
   id: string;
@@ -55,34 +38,6 @@ export function listParentTranscripts(root = PROJECTS_ROOT): TranscriptFile[] {
   return out;
 }
 
-export function loadComposerSettings(composerId: string, dbPath = STATE_DB): ComposerSettings {
-  const db = new Database(dbPath, { readonly: true });
-  try {
-    const row = db
-      .query("SELECT value FROM cursorDiskKV WHERE key = ?")
-      .get(`composerData:${composerId}`) as { value: string } | null;
-
-    if (!row) {
-      return { model: "other", mode: "other", force: "other", max: "0" };
-    }
-
-    const data = JSON.parse(row.value) as {
-      modelConfig?: { modelName?: string; maxMode?: boolean };
-      unifiedMode?: string;
-      forceMode?: string;
-    };
-
-    return {
-      model: data.modelConfig?.modelName ?? "other",
-      mode: data.unifiedMode ?? "other",
-      force: data.forceMode ?? "other",
-      max: data.modelConfig?.maxMode ? "1" : "0",
-    };
-  } finally {
-    db.close();
-  }
-}
-
 type JsonlContent =
   | { type: "text"; text?: string }
   | { type: "tool_use"; name?: string; input?: Record<string, unknown> };
@@ -102,22 +57,8 @@ function shellCommandFromInput(input: Record<string, unknown> | undefined): stri
   return typeof command === "string" ? command : undefined;
 }
 
-/**
- * Yield normalized pipeline messages for one transcript:
- * session header, then user / agent / turn_ended steps in order.
- */
-export async function* messagesFromTranscript(
-  path: string,
-  settings: ComposerSettings,
-): AsyncGenerator<Message> {
-  yield {
-    kind: "session",
-    model: settings.model,
-    mode: settings.mode,
-    force: settings.force,
-    max: settings.max,
-  };
-
+/** Yield normalized pipeline messages for one transcript, in order. */
+export async function* messagesFromTranscript(path: string): AsyncGenerator<Message> {
   const file = Bun.file(path);
   const text = await file.text();
   for (const line of text.split("\n")) {

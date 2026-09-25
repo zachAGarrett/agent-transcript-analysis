@@ -31,8 +31,7 @@ type VersionModule = {
   } & Record<string, unknown>;
   taxonomy: Array<{ axis: string }>;
   listParentTranscripts: () => Array<{ id: string; path: string }>;
-  loadComposerSettings: (id: string) => unknown;
-  messagesFromTranscript: (path: string, settings: unknown) => AsyncGenerator<unknown>;
+  messagesFromTranscript: (path: string) => AsyncGenerator<unknown>;
 };
 
 async function loadVersion(root: string, version: string): Promise<VersionModule> {
@@ -44,7 +43,6 @@ async function loadVersion(root: string, version: string): Promise<VersionModule
     encoder: encoderMod.encoder,
     taxonomy: taxonomyMod.taxonomy,
     listParentTranscripts: loadMod.listParentTranscripts,
-    loadComposerSettings: loadMod.loadComposerSettings,
     messagesFromTranscript: loadMod.messagesFromTranscript,
   };
 }
@@ -99,10 +97,9 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
   console.log(`Writing job ${dirRel}`);
 
   for (const transcript of selected) {
-    const settings = mod.loadComposerSettings(transcript.id);
     const encodings: Encoding[] = [];
     for await (const encoding of pipeline.feed(
-      mod.messagesFromTranscript(transcript.path, settings) as never,
+      mod.messagesFromTranscript(transcript.path) as never,
     )) {
       if (encoding.atoms.every((atom) => atom === null)) continue;
       encodings.push(encoding);

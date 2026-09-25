@@ -11,20 +11,15 @@ function compact(partial: Record<string, string>): string {
     partial.tool ? `tool:${partial.tool}` : null,
     null,
     null,
-    partial.model ? `model:${partial.model}` : null,
-    partial.mode ? `mode:${partial.mode}` : null,
-    partial.force ? `force:${partial.force}` : null,
-    partial.max ? `max:${partial.max}` : null,
   ];
   return encoder.compact(atoms);
 }
 
 describe("splitAgentTurns", () => {
-  test("drops header and user rows; keeps intent in meta", () => {
+  test("drops user rows; keeps intent in meta", () => {
     const session: Sequence = {
       id: "sess",
       symbols: [
-        compact({ model: "default", mode: "agent", force: "edit", max: "0" }),
         compact({ who: "user", intent: "plan" }),
         compact({ who: "agent", kind: "text" }),
         compact({ who: "agent", kind: "tool", tool: "Read" }),

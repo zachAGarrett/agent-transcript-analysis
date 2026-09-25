@@ -21,7 +21,7 @@ function intentOf(composite: string): string | null {
 
 /**
  * Project a full-session sequence into agent-turn sequences.
- * Drops session header and user rows from the feed; keeps preceding intent in meta.
+ * Drops user rows (and any row without who); keeps preceding intent in meta.
  */
 export function splitAgentTurns(session: Sequence): Sequence[] {
   const turns: Sequence[] = [];

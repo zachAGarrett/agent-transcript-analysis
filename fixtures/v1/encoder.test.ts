@@ -117,15 +117,9 @@ describe("Pipeline", () => {
   test("feed yields encodings in order", async () => {
     const pipeline = new Pipeline(encoder);
     const messages: Message[] = [
-      {
-        kind: "session",
-        model: "default",
-        mode: "agent",
-        force: "edit",
-        max: "0",
-      },
       { kind: "user", who: "user", query: "fix the bug" },
       { kind: "agent", who: "agent", contentKind: "text" },
+      { kind: "turn_ended", who: "agent", status: "success" },
     ];
 
     async function* source() {
@@ -139,9 +133,9 @@ describe("Pipeline", () => {
 
     const gap = (n: number) => Array<null>(n).fill(null);
     expect(out).toEqual([
-      [...gap(6), "model:default", "mode:agent", "force:edit", "max:0"],
-      ["who:user", "intent:fix", ...gap(8)],
-      ["who:agent", null, "kind:text", ...gap(7)],
+      ["who:user", "intent:fix", ...gap(4)],
+      ["who:agent", null, "kind:text", ...gap(3)],
+      ["who:agent", ...gap(4), "end:success"],
     ]);
   });
 });

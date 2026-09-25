@@ -6,13 +6,13 @@ export type { Message } from "./message";
 /**
  * v1 taxonomy axes. Order is the step column order.
  * Classifiers return null when the axis does not apply to the message.
+ * Only axes derivable from the transcript JSONL are included.
  */
 export const taxonomy: readonly TaxonomyEntry<Message>[] = [
   {
     axis: "who",
     description: "Speaker of the message: user or agent.",
     async classify(message) {
-      if (message.kind === "session") return null;
       return message.who;
     },
   },
@@ -61,38 +61,6 @@ export const taxonomy: readonly TaxonomyEntry<Message>[] = [
     async classify(message) {
       if (message.kind !== "turn_ended") return null;
       return message.status;
-    },
-  },
-  {
-    axis: "model",
-    description: "Session model name from composerData.modelConfig.modelName.",
-    async classify(message) {
-      if (message.kind !== "session") return null;
-      return message.model;
-    },
-  },
-  {
-    axis: "mode",
-    description: "Session unifiedMode: agent, plan, or chat.",
-    async classify(message) {
-      if (message.kind !== "session") return null;
-      return message.mode;
-    },
-  },
-  {
-    axis: "force",
-    description: "Session forceMode from composerData.",
-    async classify(message) {
-      if (message.kind !== "session") return null;
-      return message.force;
-    },
-  },
-  {
-    axis: "max",
-    description: "Session maxMode flag as 0 or 1.",
-    async classify(message) {
-      if (message.kind !== "session") return null;
-      return message.max;
     },
   },
 ];
@@ -167,21 +135,4 @@ export const knownAtoms: readonly string[] = [
   "end:error",
   "end:cancelled",
   "end:other",
-  "model:default",
-  "model:gpt-5.6-sol",
-  "model:claude-opus-5",
-  "model:claude-sonnet-5",
-  "model:grok-4.6",
-  "model:grok-4.7",
-  "model:composer-2.5",
-  "model:other",
-  "mode:agent",
-  "mode:plan",
-  "mode:chat",
-  "mode:other",
-  "force:edit",
-  "force:chat",
-  "force:other",
-  "max:0",
-  "max:1",
 ];
