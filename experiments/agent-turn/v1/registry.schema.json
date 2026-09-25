@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiments/agent-turn/v1/registry.schema.json",
+  "title": "Agent-turn experiment job registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "jobs"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "createdAt", "dir", "fileCount"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Job folder name, typically an ISO-like datetime stamp."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dir": {
+            "type": "string",
+            "description": "Path to the run folder relative to the repo root."
+          },
+          "fileCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of held-out agent turns decoded."
+          }
+        }
+      }
+    }
+  }
+}
