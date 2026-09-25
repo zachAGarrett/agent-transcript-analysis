@@ -18,7 +18,7 @@ export const experiment: ExperimentDefinition = {
     const viterbiPaths = collectPaths(ctx.heldOut, decode, "viterbi");
     const beamPaths = collectPaths(ctx.heldOut, decode, "beam");
     return analyze({
-      taggingDir: ctx.taggingDir,
+      producer: ctx.producer,
       latticeDb: ctx.latticeDbRel,
       trainCount: ctx.trainCount,
       heldOutCount: ctx.heldOutCount,

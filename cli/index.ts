@@ -2,8 +2,8 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runJob } from "@/experiments/run-job";
-import type { ExperimentDefinition, JobRegistry } from "@/experiments/types";
-import { latestFixtureVersion, prepareFixtures } from "@/fixtures/prepare";
+import type { ExperimentDefinition } from "@/experiments/types";
+import { latestFixtureVersion, listJobIds, prepareFixtures } from "@/fixtures/prepare";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -103,21 +103,16 @@ async function resolveFixtureJobDir(
   jobId: string | undefined,
 ): Promise<{ version: string; jobDir: string; jobId: string }> {
   const version = fixtureVersion ?? (await latestFixtureVersion(ROOT));
-  const registryPath = join(ROOT, "fixtures", version, "registry.json");
-  if (!(await Bun.file(registryPath).exists())) {
-    throw new Error(`No registry at fixtures/${version}/registry.json`);
+  const versionDir = join(ROOT, "fixtures", version);
+  const jobs = await listJobIds(versionDir);
+  if (jobs.length === 0) {
+    throw new Error(`No job folders under fixtures/${version}/`);
   }
-  const registry = (await Bun.file(registryPath).json()) as JobRegistry;
-  if (registry.jobs.length === 0) {
-    throw new Error(`No jobs in fixtures/${version}/registry.json`);
+  const id = jobId ?? jobs.at(-1);
+  if (!id || !jobs.includes(id)) {
+    throw new Error(`Job "${jobId}" not found in fixtures/${version}. Known: ${jobs.join(", ")}`);
   }
-  const job = jobId ? registry.jobs.find((j) => j.id === jobId) : registry.jobs.at(-1);
-  if (!job) {
-    throw new Error(
-      `Job "${jobId}" not found in fixtures/${version}. Known: ${registry.jobs.map((j) => j.id).join(", ")}`,
-    );
-  }
-  return { version, jobDir: join(ROOT, job.dir), jobId: job.id };
+  return { version, jobDir: join(versionDir, id), jobId: id };
 }
 
 async function selectCsvPaths(
@@ -125,7 +120,7 @@ async function selectCsvPaths(
   glob: string,
   count: number | undefined,
   pct: number | undefined,
-): Promise<string[]> {
+): Promise<{ paths: string[]; matched: number; selected: number }> {
   const names = (
     await Array.fromAsync(new Bun.Glob(glob).scan({ cwd: jobDir, onlyFiles: true }))
   ).sort();
@@ -139,7 +134,11 @@ async function selectCsvPaths(
     const n = Math.max(1, Math.floor((names.length * pct) / 100));
     selected = names.slice(0, n);
   }
-  return selected.map((name) => join(jobDir, name));
+  return {
+    paths: selected.map((name) => join(jobDir, name)),
+    matched: names.length,
+    selected: selected.length,
+  };
 }
 
 async function cmdFixturesPrepare(args: string[]): Promise<void> {
@@ -176,18 +175,29 @@ async function cmdExperiments(name: string | undefined, args: string[]): Promise
   }
 
   const definition = await resolveExperiment(name, version);
-  const { jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
-  const paths = await selectCsvPaths(jobDir, glob, count, pct);
+  const { version: fvResolved, jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
+  const { paths, matched, selected } = await selectCsvPaths(jobDir, glob, count, pct);
   if (paths.length === 0) {
     throw new Error(`No CSVs matched ${glob} in ${jobDir}`);
   }
 
+  const dirRel = jobDir.startsWith(ROOT) ? jobDir.slice(ROOT.length).replace(/^\//, "") : jobDir;
   console.log(
-    `Running ${definition.name}@${definition.version} on fixture job ${jobId} (${paths.length} files)`,
+    `Running ${definition.name}@${definition.version} on fixture job ${jobId} (${selected}/${matched} files)`,
   );
   await runJob(definition, {
     paths,
-    taggingDir: jobDir,
+    producer: {
+      kind: "directory",
+      dir: dirRel || `fixtures/${fvResolved}`,
+      glob,
+      sample: {
+        matched,
+        selected,
+        ...(count !== undefined ? { n: count } : {}),
+        ...(pct !== undefined ? { pct } : {}),
+      },
+    },
     root: ROOT,
   });
 }

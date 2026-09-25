@@ -1,4 +1,5 @@
 import type { Sequence } from "@/experiments/producers";
+import type { ProducerSource } from "@/experiments/types";
 import { decoder } from "@/fixtures/v1/decoder";
 import { taxonomy } from "@/fixtures/v1/taxonomy";
 
@@ -12,7 +13,6 @@ export type MacroEntry = {
   token: string;
   length: number;
   count: number;
-  atoms: Array<string | null>[];
   hubScore?: number;
   crossesTurn: boolean;
 };
@@ -26,16 +26,16 @@ export type DecoderAnalysis = {
     id: string;
     symbolCount: number;
     tokenCount: number;
-    atoms: Array<Array<string | null>>;
+    macros: string[];
   }>;
 };
 
 export type AnalysisReport = {
   job: {
-    taggingDir: string;
+    latticeDb: string;
     trainCount: number;
     heldOutCount: number;
-    latticeDb: string;
+    producer: ProducerSource;
   };
   lattice: { vocabularySize: number };
   viterbi: DecoderAnalysis;
@@ -128,17 +128,13 @@ function analyzeDecoder(
     }
   }
 
-  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => {
-    const atoms = tokenToAtomSteps(token);
-    return {
-      token,
-      length: tokenLength(token),
-      count,
-      atoms,
-      hubScore,
-      crossesTurn: crossesTurn(atoms),
-    };
-  };
+  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => ({
+    token,
+    length: tokenLength(token),
+    count,
+    hubScore,
+    crossesTurn: crossesTurn(tokenToAtomSteps(token)),
+  });
 
   const macrosByFrequency = [...freq.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -161,11 +157,11 @@ function analyzeDecoder(
     id: path.id,
     symbolCount: path.symbols.length,
     tokenCount: path.tokens.length,
-    atoms: path.tokens.flatMap((token) => {
+    macros: path.tokens.filter((token) => {
       try {
-        return tokenToAtomSteps(token);
+        return tokenLength(token) > 1;
       } catch {
-        return [];
+        return false;
       }
     }),
   }));
@@ -180,7 +176,7 @@ function analyzeDecoder(
 }
 
 export function analyze(args: {
-  taggingDir: string;
+  producer: ProducerSource;
   latticeDb: string;
   trainCount: number;
   heldOutCount: number;
@@ -209,10 +205,10 @@ export function analyze(args: {
 
   return {
     job: {
-      taggingDir: args.taggingDir,
+      latticeDb: args.latticeDb,
       trainCount: args.trainCount,
       heldOutCount: args.heldOutCount,
-      latticeDb: args.latticeDb,
+      producer: args.producer,
     },
     lattice: { vocabularySize: args.vocabularySize },
     viterbi,
@@ -230,7 +226,9 @@ export function printAnalysis(report: AnalysisReport): void {
     entries
       .slice(0, 10)
       .map((m, i) => {
-        const who = m.atoms.map((step) => step.find((a) => a?.startsWith("who:")) ?? "-").join("→");
+        const who = tokenToAtomSteps(m.token)
+          .map((step) => step.find((a) => a?.startsWith("who:")) ?? "-")
+          .join("→");
         return `  ${i + 1}. len=${m.length} count=${m.count} hub=${m.hubScore?.toFixed(4) ?? "-"} cross=${m.crossesTurn} [${who}]`;
       })
       .join("\n");

@@ -1,18 +1,24 @@
 import type { LatticeDecodeOptions } from "@khoralabs/tkn";
 import type { Producer, Sequence } from "@/experiments/producers";
 
-export type JobRegistry = {
-  version: string;
-  jobs: Array<{
-    id: string;
-    createdAt: string;
-    dir: string;
-    fileCount: number;
-  }>;
+/** How a directory producer selected files for a run. */
+export type DirectorySample = {
+  matched: number;
+  selected: number;
+  n?: number;
+  pct?: number;
+};
+
+/** Producer provenance recorded on the job (extensible by kind). */
+export type ProducerSource = {
+  kind: "directory";
+  dir: string;
+  glob: string;
+  sample: DirectorySample;
 };
 
 export type BuildReportContext = {
-  taggingDir: string;
+  producer: ProducerSource;
   latticeDbRel: string;
   trainCount: number;
   heldOutCount: number;
@@ -31,9 +37,9 @@ export type ExperimentDefinition = {
 };
 
 export type RunJobOptions = {
-  /** Absolute paths to fixture CSV files. */
+  /** Absolute paths to sequence source files. */
   paths: string[];
-  /** Absolute or relative label for the tagging source (for the report). */
-  taggingDir: string;
+  /** Producer provenance for the report (agnostic of experiment). */
+  producer: ProducerSource;
   root?: string;
 };

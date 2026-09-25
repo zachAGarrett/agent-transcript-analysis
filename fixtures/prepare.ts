@@ -1,6 +1,5 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { JobRegistry } from "@/experiments/types";
 import type { Encoding } from "@/fixtures/encoders";
 import { Pipeline } from "@/fixtures/pipeline";
 
@@ -113,23 +112,21 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
     }
   }
 
-  const registryPath = join(root, "fixtures", version, "registry.json");
-  let registry: JobRegistry;
-  if (await Bun.file(registryPath).exists()) {
-    registry = (await Bun.file(registryPath).json()) as JobRegistry;
-  } else {
-    registry = { version, jobs: [] };
-  }
-  registry.jobs.push({
-    id,
-    createdAt: createdAt.toISOString(),
-    dir: dirRel,
-    fileCount,
-  });
-  await Bun.write(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
-
   console.log(`Done: ${fileCount} CSVs in ${dirRel}`);
   return { dir: dirRel, fileCount, id };
+}
+
+/** Datetime-stamped job folder names under a parent (fixtures/<v>/ or experiment runs). */
+export async function listJobIds(parentDir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(parentDir, { withFileTypes: true });
+    return entries
+      .filter((d) => d.isDirectory() && /^\d{4}-/.test(d.name))
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /** Latest fixtures/v* directory name (e.g. v1). */

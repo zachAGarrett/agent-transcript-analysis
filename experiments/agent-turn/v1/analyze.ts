@@ -1,4 +1,5 @@
 import type { Sequence } from "@/experiments/producers";
+import type { ProducerSource } from "@/experiments/types";
 import { decoder } from "@/fixtures/v1/decoder";
 import { taxonomy } from "@/fixtures/v1/taxonomy";
 
@@ -13,17 +14,13 @@ export type MacroEntry = {
   token: string;
   length: number;
   count: number;
-  atoms: Array<string | null>[];
   hubScore?: number;
-  /** Should always be false for agent-turn (no user atoms in the feed). */
-  hasUserAtom: boolean;
 };
 
 export type IntentMacroPair = {
   intent: string;
   macro: string;
   count: number;
-  atoms: Array<string | null>[];
 };
 
 export type DecoderAnalysis = {
@@ -38,16 +35,16 @@ export type DecoderAnalysis = {
     intent: string | null;
     symbolCount: number;
     tokenCount: number;
-    macros: Array<string | null>[];
+    macros: string[];
   }>;
 };
 
 export type AnalysisReport = {
   job: {
-    taggingDir: string;
+    latticeDb: string;
     trainCount: number;
     heldOutCount: number;
-    latticeDb: string;
+    producer: ProducerSource;
   };
   lattice: { vocabularySize: number };
   viterbi: DecoderAnalysis;
@@ -134,17 +131,12 @@ function analyzeDecoder(
     }
   }
 
-  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => {
-    const atoms = tokenToAtomSteps(token);
-    return {
-      token,
-      length: tokenLength(token),
-      count,
-      atoms,
-      hubScore,
-      hasUserAtom: hasUserAtom(atoms),
-    };
-  };
+  const toEntry = (token: string, count: number, hubScore?: number): MacroEntry => ({
+    token,
+    length: tokenLength(token),
+    count,
+    hubScore,
+  });
 
   const macrosByFrequency = [...freq.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -166,12 +158,7 @@ function analyzeDecoder(
   const intentToMacros: IntentMacroPair[] = [...intentMacro.entries()]
     .map(([key, count]) => {
       const [intent, macro] = key.split("\0") as [string, string];
-      return {
-        intent,
-        macro,
-        count,
-        atoms: tokenToAtomSteps(macro),
-      };
+      return { intent, macro, count };
     })
     .sort((a, b) => b.count - a.count || a.intent.localeCompare(b.intent))
     .slice(0, topK);
@@ -181,12 +168,11 @@ function analyzeDecoder(
     intent: path.intent,
     symbolCount: path.symbols.length,
     tokenCount: path.tokens.length,
-    macros: path.tokens.flatMap((token) => {
+    macros: path.tokens.filter((token) => {
       try {
-        if (tokenLength(token) <= 1) return [];
-        return tokenToAtomSteps(token);
+        return tokenLength(token) > 1;
       } catch {
-        return [];
+        return false;
       }
     }),
   }));
@@ -202,7 +188,7 @@ function analyzeDecoder(
 }
 
 export function analyze(args: {
-  taggingDir: string;
+  producer: ProducerSource;
   latticeDb: string;
   trainCount: number;
   heldOutCount: number;
@@ -230,10 +216,10 @@ export function analyze(args: {
 
   return {
     job: {
-      taggingDir: args.taggingDir,
+      latticeDb: args.latticeDb,
       trainCount: args.trainCount,
       heldOutCount: args.heldOutCount,
-      latticeDb: args.latticeDb,
+      producer: args.producer,
     },
     lattice: { vocabularySize: args.vocabularySize },
     viterbi,
@@ -250,7 +236,7 @@ export function printAnalysis(report: AnalysisReport): void {
     entries
       .slice(0, 10)
       .map((m, i) => {
-        const tools = m.atoms
+        const tools = tokenToAtomSteps(m.token)
           .map(
             (step) =>
               step.find((a) => a?.startsWith("tool:")) ??
@@ -258,14 +244,14 @@ export function printAnalysis(report: AnalysisReport): void {
               "-",
           )
           .join("→");
-        return `  ${i + 1}. len=${m.length} count=${m.count} hub=${m.hubScore?.toFixed(4) ?? "-"} leak=${m.hasUserAtom} [${tools}]`;
+        return `  ${i + 1}. len=${m.length} count=${m.count} hub=${m.hubScore?.toFixed(4) ?? "-"} leak=${hasUserAtom(tokenToAtomSteps(m.token))} [${tools}]`;
       })
       .join("\n");
 
   const fmtPairs = (pairs: IntentMacroPair[]) =>
     pairs
       .slice(0, 10)
-      .map((p, i) => `  ${i + 1}. intent=${p.intent} count=${p.count} len=${p.atoms.length}`)
+      .map((p, i) => `  ${i + 1}. intent=${p.intent} count=${p.count} len=${tokenLength(p.macro)}`)
       .join("\n");
 
   console.log(`vocabularySize=${report.lattice.vocabularySize}`);

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Lattice } from "@khoralabs/tkn/bun-sqlite";
 import { ExperimentPipeline } from "@/experiments/pipeline";
 import { producerFrom, type Sequence } from "@/experiments/producers";
-import type { ExperimentDefinition, JobRegistry, RunJobOptions } from "@/experiments/types";
+import type { ExperimentDefinition, RunJobOptions } from "@/experiments/types";
 
 export function jobId(now = new Date()): string {
   const iso = now.toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -32,23 +32,8 @@ export function splitTrainHeldOut(sequences: Sequence[]): {
   return { train: sorted.slice(0, cut), heldOut: sorted.slice(cut) };
 }
 
-async function appendRegistry(
-  registryPath: string,
-  version: string,
-  entry: JobRegistry["jobs"][number],
-): Promise<void> {
-  let registry: JobRegistry;
-  if (await Bun.file(registryPath).exists()) {
-    registry = (await Bun.file(registryPath).json()) as JobRegistry;
-  } else {
-    registry = { version, jobs: [] };
-  }
-  registry.jobs.push(entry);
-  await Bun.write(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
-}
-
 /**
- * Shared experiment runner: train SQLite lattice, decode held-out, analyze, register.
+ * Shared experiment runner: train SQLite lattice, decode held-out, analyze.
  */
 export async function runJob(
   definition: ExperimentDefinition,
@@ -61,18 +46,11 @@ export async function runJob(
   const dirAbs = join(root, dirRel);
   await mkdir(dirAbs, { recursive: true });
   const latticeDb = join(dirAbs, "lattice.db");
-  const registryPath = join(
-    root,
-    "experiments",
-    definition.name,
-    definition.version,
-    "registry.json",
-  );
 
   const producer = definition.createProducer({ paths: options.paths });
   const all = await loadAll(producer);
   if (all.length === 0) {
-    throw new Error(`No sequences from ${options.taggingDir}`);
+    throw new Error(`No sequences from producer ${options.producer.kind}`);
   }
 
   const { train, heldOut } = splitTrainHeldOut(all);
@@ -89,7 +67,7 @@ export async function runJob(
     lattice.invalidateCompiled();
 
     const report = definition.buildReport({
-      taggingDir: options.taggingDir,
+      producer: options.producer,
       latticeDbRel: `${dirRel}/lattice.db`,
       trainCount: train.length,
       heldOutCount: heldOut.length,
@@ -100,13 +78,6 @@ export async function runJob(
     });
 
     await Bun.write(join(dirAbs, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
-    await appendRegistry(registryPath, definition.version, {
-      id,
-      createdAt: createdAt.toISOString(),
-      dir: dirRel,
-      fileCount: heldOut.length,
-    });
-
     definition.printAnalysis(report);
     return report;
   } finally {
