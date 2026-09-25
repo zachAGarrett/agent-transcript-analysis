@@ -3,7 +3,13 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runJob } from "@/experiments/run-job";
 import type { ExperimentDefinition } from "@/experiments/types";
-import { latestFixtureVersion, listJobIds, prepareFixtures } from "@/fixtures/prepare";
+import {
+  fixtureRunsDir,
+  latestFixtureVersion,
+  listJobIds,
+  prepareFixtures,
+  RUNS_DIRNAME,
+} from "@/fixtures/prepare";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -40,12 +46,12 @@ function takeBool(args: string[], name: string): boolean {
   return true;
 }
 
-/** experiments/<name>/<version>/experiment.ts — version dirs only (skip datetime run folders). */
+/** experiments/<name>/<version>/experiment.ts — skip runs/ and datetime folders. */
 async function listVersionDirs(expDir: string): Promise<string[]> {
   try {
     const entries = await readdir(expDir, { withFileTypes: true });
     return entries
-      .filter((d) => d.isDirectory() && !/^\d{4}-/.test(d.name))
+      .filter((d) => d.isDirectory() && d.name !== RUNS_DIRNAME && !/^\d{4}-/.test(d.name))
       .map((d) => d.name)
       .sort();
   } catch {
@@ -103,16 +109,18 @@ async function resolveFixtureJobDir(
   jobId: string | undefined,
 ): Promise<{ version: string; jobDir: string; jobId: string }> {
   const version = fixtureVersion ?? (await latestFixtureVersion(ROOT));
-  const versionDir = join(ROOT, "fixtures", version);
-  const jobs = await listJobIds(versionDir);
+  const runsDir = fixtureRunsDir(ROOT, version);
+  const jobs = await listJobIds(runsDir);
   if (jobs.length === 0) {
-    throw new Error(`No job folders under fixtures/${version}/`);
+    throw new Error(`No job folders under fixtures/${version}/runs/`);
   }
   const id = jobId ?? jobs.at(-1);
   if (!id || !jobs.includes(id)) {
-    throw new Error(`Job "${jobId}" not found in fixtures/${version}. Known: ${jobs.join(", ")}`);
+    throw new Error(
+      `Job "${jobId}" not found in fixtures/${version}/runs. Known: ${jobs.join(", ")}`,
+    );
   }
-  return { version, jobDir: join(versionDir, id), jobId: id };
+  return { version, jobDir: join(runsDir, id), jobId: id };
 }
 
 async function selectCsvPaths(

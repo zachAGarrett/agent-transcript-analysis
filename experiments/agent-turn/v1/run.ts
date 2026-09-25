@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     ? arg.endsWith(".csv")
       ? arg
       : join(arg)
-    : join(ROOT, "fixtures/v1/2026-09-24T23-33-14Z");
+    : join(ROOT, "fixtures/v1/runs/2026-09-24T23-33-14Z");
   const glob = "*.csv";
 
   const names = path.endsWith(".csv")

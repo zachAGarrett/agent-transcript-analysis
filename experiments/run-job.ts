@@ -4,6 +4,7 @@ import { Lattice } from "@khoralabs/tkn/bun-sqlite";
 import { ExperimentPipeline } from "@/experiments/pipeline";
 import { producerFrom, type Sequence } from "@/experiments/producers";
 import type { ExperimentDefinition, RunJobOptions } from "@/experiments/types";
+import { RUNS_DIRNAME } from "@/fixtures/prepare";
 
 export function jobId(now = new Date()): string {
   const iso = now.toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -42,7 +43,7 @@ export async function runJob(
   const root = options.root ?? join(import.meta.dir, "..");
   const createdAt = new Date();
   const id = jobId(createdAt);
-  const dirRel = `experiments/${definition.name}/${definition.version}/${id}`;
+  const dirRel = `experiments/${definition.name}/${definition.version}/${RUNS_DIRNAME}/${id}`;
   const dirAbs = join(root, dirRel);
   await mkdir(dirAbs, { recursive: true });
   const latticeDb = join(dirAbs, "lattice.db");

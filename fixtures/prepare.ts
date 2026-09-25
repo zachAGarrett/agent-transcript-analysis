@@ -3,6 +3,9 @@ import { join } from "node:path";
 import type { Encoding } from "@/fixtures/encoders";
 import { Pipeline } from "@/fixtures/pipeline";
 
+/** Directory name for datetime-stamped job / run outputs under a version. */
+export const RUNS_DIRNAME = "runs";
+
 export type PrepareOptions = {
   version: string;
   /** When set, only these transcript ids. When omitted with all=true, every parent transcript. */
@@ -57,7 +60,7 @@ export function encodingToCsvRow(encoding: Encoding): string {
 }
 
 /**
- * Prepare a fixture job: encode transcripts into CSVs under fixtures/<version>/<datetime>/.
+ * Prepare a fixture job: encode transcripts into CSVs under fixtures/<version>/runs/<datetime>/.
  */
 export async function prepareFixtures(options: PrepareOptions): Promise<{
   dir: string;
@@ -84,7 +87,7 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
 
   const createdAt = new Date();
   const id = jobId(createdAt);
-  const dirRel = `fixtures/${version}/${id}`;
+  const dirRel = `fixtures/${version}/${RUNS_DIRNAME}/${id}`;
   const dirAbs = join(root, dirRel);
   await mkdir(dirAbs, { recursive: true });
 
@@ -116,10 +119,10 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
   return { dir: dirRel, fileCount, id };
 }
 
-/** Datetime-stamped job folder names under a parent (fixtures/<v>/ or experiment runs). */
-export async function listJobIds(parentDir: string): Promise<string[]> {
+/** Datetime-stamped job folder names under a runs/ (or legacy version) directory. */
+export async function listJobIds(runsDir: string): Promise<string[]> {
   try {
-    const entries = await readdir(parentDir, { withFileTypes: true });
+    const entries = await readdir(runsDir, { withFileTypes: true });
     return entries
       .filter((d) => d.isDirectory() && /^\d{4}-/.test(d.name))
       .map((d) => d.name)
@@ -127,6 +130,11 @@ export async function listJobIds(parentDir: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/** Absolute path to fixtures/<version>/runs. */
+export function fixtureRunsDir(root: string, version: string): string {
+  return join(root, "fixtures", version, RUNS_DIRNAME);
 }
 
 /** Latest fixtures/v* directory name (e.g. v1). */
