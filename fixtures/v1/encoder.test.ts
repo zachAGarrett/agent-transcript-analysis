@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { buildCodebook, EMPTY_SYMBOL, toBase36 } from "../encoders";
 import { Pipeline } from "../pipeline";
+import { encodingToCsvRow } from "../prepare";
 import { decoder } from "./decoder";
 import { encodeAtom, encoder, resolveAtom } from "./encoder";
 import type { Message } from "./message";
-import { encodingToCsvRow } from "./run";
 import { classifyIntent, classifyShellFamily, knownAtoms, taxonomy } from "./taxonomy";
 
 describe("classifyIntent", () => {
