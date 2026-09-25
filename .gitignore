@@ -36,3 +36,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Tagging pipeline job CSV folders (fixtures/<version>/<datetime>/)
 fixtures/*/[0-9][0-9][0-9][0-9]-*/
+
+# Experiment run folders (experiments/<name>/<version>/<datetime>/)
+experiments/*/*/[0-9][0-9][0-9][0-9]-*/

@@ -12,11 +12,16 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepare": "husky",
+    "cli": "bun cli/index.ts",
     "agent-review": "agent-review",
     "review": "agent-review run --scope staged --include-workstream"
   },
+  "bin": {
+    "cli": "./cli/index.ts"
+  },
   "dependencies": {
-    "@khoralabs/agent-review": "^0.2.2"
+    "@khoralabs/agent-review": "^0.2.2",
+    "@khoralabs/tkn": "^0.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
