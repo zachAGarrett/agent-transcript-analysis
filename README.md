@@ -1,15 +1,66 @@
 # workstream-tokens
 
-To install dependencies:
+Tag Cursor agent transcripts and learn lattice patterns with `@khoralabs/tkn`.
 
-```bash
+Encode parent chats into versioned fixture CSVs, then run experiments (`agent-turn`,
+`session-span`) that train SQLite lattices and report held-out pattern metrics.
+See [docs/](docs/README.md) for how-tos, reference, and explanation.
+
+## Table of Contents
+
+- [Install](#install)
+- [Usage](#usage)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Install
+
+```sh
 bun install
 ```
 
-To run:
+Requires [Bun](https://bun.com). Cursor parent transcripts are read from
+`~/.cursor/projects/*/agent-transcripts/` when preparing fixtures.
 
-```bash
-bun run index.ts
+## Usage
+
+```sh
+# Encode all parent transcripts (v1 scheme)
+bun cli fixtures prepare -v v1 -a
+
+# Train / decode (sample first 50 CSVs from the latest fixture job)
+bun cli experiments agent-turn -fv v1 -n 50
+bun cli experiments session-span -fv v1 -n 50
+
+# HTML charts for the latest experiment report
+bun cli experiments agent-turn charts
 ```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+CLI overview: [docs/reference/cli.md](docs/reference/cli.md).
+
+## Documentation
+
+| Kind | Pages |
+| --- | --- |
+| How-to | [Prepare fixtures](docs/how-to/prepare-fixtures.md), [Run experiments](docs/how-to/run-experiments.md), [Chart reports](docs/how-to/chart-reports.md) |
+| Reference | [Layout](docs/reference/layout.md), [CLI](docs/reference/cli.md), [Fixtures v1](docs/reference/fixtures.md), [Experiments](docs/reference/experiments.md) |
+| Explanation | [Encoding and pipelines](docs/explanation/encoding-and-pipelines.md) |
+
+Per-experiment notes: [agent-turn](experiments/agent-turn/README.md), [session-span](experiments/session-span/README.md).
+
+## Contributing
+
+Open an issue or PR. Keep changes scoped. Before sending:
+
+```sh
+bun test
+bun run check
+bun run typecheck
+```
+
+Commit hooks run Biome, typecheck, and `@khoralabs/agent-review`.
+
+## License
+
+UNLICENSED © workstream-tokens

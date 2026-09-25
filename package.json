@@ -1,5 +1,6 @@
 {
   "name": "workstream-tokens",
+  "description": "Tag Cursor agent transcripts and learn lattice patterns with @khoralabs/tkn.",
   "module": "index.ts",
   "type": "module",
   "private": true,
