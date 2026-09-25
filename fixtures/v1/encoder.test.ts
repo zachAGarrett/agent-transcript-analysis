@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildCodebook, EMPTY_SYMBOL, toBase36 } from "../encoders";
+import { buildCodebook, EMPTY_SYMBOL, toBase36, UNIT_DELIMITER } from "../encoders";
 import { Pipeline } from "../pipeline";
 import { encodingToCsvRow } from "../prepare";
 import { decoder } from "./decoder";
@@ -43,10 +43,13 @@ describe("encoding", () => {
   test("compact yields one composite per row", () => {
     const atoms = ["who:user", "intent:other", ...Array(taxonomy.length - 2).fill(null)];
     const composite = encoder.compact(atoms);
+    expect(composite.endsWith(UNIT_DELIMITER)).toBe(true);
     expect(composite.startsWith(`${encodeAtom("who:user")}${encodeAtom("intent:other")}`)).toBe(
       true,
     );
-    expect(composite.endsWith(EMPTY_SYMBOL.repeat(taxonomy.length - 2))).toBe(true);
+    expect(composite.endsWith(`${EMPTY_SYMBOL.repeat(taxonomy.length - 2)}${UNIT_DELIMITER}`)).toBe(
+      true,
+    );
     expect(decoder.decode(composite)).toEqual(atoms);
   });
 

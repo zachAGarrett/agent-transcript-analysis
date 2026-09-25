@@ -1,5 +1,6 @@
 import type { Sequence } from "@/experiments/producers";
 import type { ProducerSource } from "@/experiments/types";
+import { UNIT_DELIMITER } from "@/fixtures/encoders";
 import { decoder } from "@/fixtures/v1/decoder";
 import { taxonomy } from "@/fixtures/v1/taxonomy";
 
@@ -57,30 +58,26 @@ export type AnalysisReport = {
 
 const COMPOSITE_WIDTH = taxonomy.length;
 
+function unitParts(token: string): string[] {
+  const units = token.split(UNIT_DELIMITER).filter((u) => u.length > 0);
+  if (units.length === 0) {
+    throw new Error(`Invalid token: ${token}`);
+  }
+  for (const unit of units) {
+    const parts = unit.match(/(?:-|[0-9a-z]+)\./g);
+    if (!parts || parts.join("") !== unit || parts.length !== COMPOSITE_WIDTH) {
+      throw new Error(`Invalid token: ${token}`);
+    }
+  }
+  return units;
+}
+
 export function tokenLength(token: string): number {
-  const parts = token.match(/(?:-|[0-9a-z]+)\./g);
-  if (!parts || parts.join("") !== token) {
-    throw new Error(`Invalid token for length: ${token}`);
-  }
-  if (parts.length % COMPOSITE_WIDTH !== 0) {
-    throw new Error(
-      `Token fragment count ${parts.length} not divisible by width ${COMPOSITE_WIDTH}`,
-    );
-  }
-  return parts.length / COMPOSITE_WIDTH;
+  return unitParts(token).length;
 }
 
 export function tokenToAtomSteps(token: string): Array<Array<string | null>> {
-  const parts = token.match(/(?:-|[0-9a-z]+)\./g);
-  if (!parts || parts.join("") !== token) {
-    throw new Error(`Invalid token: ${token}`);
-  }
-  const steps: Array<Array<string | null>> = [];
-  for (let i = 0; i < parts.length; i += COMPOSITE_WIDTH) {
-    const composite = parts.slice(i, i + COMPOSITE_WIDTH).join("");
-    steps.push(decoder.decode(composite));
-  }
-  return steps;
+  return unitParts(token).map((unit) => decoder.decode(unit));
 }
 
 function hasUserAtom(atomSteps: Array<Array<string | null>>): boolean {

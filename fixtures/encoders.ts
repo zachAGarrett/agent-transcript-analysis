@@ -9,6 +9,13 @@ export type Atom = string;
  */
 export const EMPTY_SYMBOL = "-.";
 
+/**
+ * Terminates each compacted sequence unit so concatenated lattice macros stay
+ * human-splittable (`unit|unit|`) without relying on fixed width alone.
+ * Outside the base36 + empty alphabet.
+ */
+export const UNIT_DELIMITER = "|";
+
 /** Encoded step: one entry per taxonomy axis, in scheme order. */
 export type Encoding = {
   atoms: Array<Atom | null>;
@@ -50,18 +57,26 @@ export async function encodeWithTaxonomy<TMessage>(
   };
 }
 
-/** Compact positional atoms via an atom encoder into one composite string. */
+/** Compact positional atoms via an atom encoder into one delimited sequence unit. */
 export function compactAtoms(
   atoms: ReadonlyArray<Atom | null>,
   encodeAtom: (atom: Atom) => string,
 ): string {
-  return atoms.map((atom) => (atom === null ? EMPTY_SYMBOL : encodeAtom(atom))).join("");
+  return `${atoms.map((atom) => (atom === null ? EMPTY_SYMBOL : encodeAtom(atom))).join("")}${UNIT_DELIMITER}`;
+}
+
+/** Strip a trailing unit delimiter before fragment parsing. */
+export function stripUnitDelimiter(composite: string): string {
+  return composite.endsWith(UNIT_DELIMITER)
+    ? composite.slice(0, -UNIT_DELIMITER.length)
+    : composite;
 }
 
 /** Split a composite on the trailing-dot delimiter into symbol fragments. */
 export function splitComposite(composite: string): string[] {
-  const parts = composite.match(/(?:-|[0-9a-z]+)\./g);
-  if (!parts || parts.join("") !== composite) {
+  const body = stripUnitDelimiter(composite);
+  const parts = body.match(/(?:-|[0-9a-z]+)\./g);
+  if (!parts || parts.join("") !== body) {
     throw new Error(`Invalid composite ${composite}`);
   }
   return parts;
