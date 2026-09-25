@@ -49,6 +49,9 @@ CLI overview: [docs/reference/cli.md](docs/reference/cli.md).
 
 Per-experiment notes: [agent-turn](experiments/agent-turn/README.md), [session-span](experiments/session-span/README.md).
 
+Agent skill for operating the CLI: [`.agents/skills/cli/SKILL.md`](.agents/skills/cli/SKILL.md).
+Use [documentation](.agents/skills/agent-review/documentation/SKILL.md) when editing docs.
+
 ## Contributing
 
 Open an issue or PR. Keep changes scoped. Before sending:

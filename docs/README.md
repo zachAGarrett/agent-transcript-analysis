@@ -2,6 +2,10 @@
 
 Diátaxis layout for `workstream-tokens`.
 
+Agent operators: load [`.agents/skills/cli/SKILL.md`](../.agents/skills/cli/SKILL.md)
+to run the CLI; use [`.agents/skills/agent-review/documentation/SKILL.md`](../.agents/skills/agent-review/documentation/SKILL.md)
+when changing these pages.
+
 ## How-to guides
 
 - [Prepare fixture CSVs](how-to/prepare-fixtures.md)
