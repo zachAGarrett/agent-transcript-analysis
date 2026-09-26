@@ -4,6 +4,11 @@ import { runJob } from "@/experiments/run-job";
 
 const ROOT = join(import.meta.dir, "../../..");
 
+function fixtureVersionFromPath(path: string): string {
+  const match = path.match(/fixtures\/(v[^/]+)\//);
+  return match?.[1] ?? "v1";
+}
+
 /** Thin entry: prefer `bun cli experiments agent-turn …`. */
 async function main(): Promise<void> {
   const arg = process.argv[2];
@@ -19,7 +24,11 @@ async function main(): Promise<void> {
     : (await Array.fromAsync(new Bun.Glob(glob).scan({ cwd: path, onlyFiles: true }))).sort();
   const paths = path.endsWith(".csv") ? [path] : names.map((name) => join(path, name));
 
-  await runJob(experiment, { paths, root: ROOT });
+  await runJob(experiment, {
+    paths,
+    fixtureVersion: fixtureVersionFromPath(path),
+    root: ROOT,
+  });
 }
 
 if (import.meta.main) {

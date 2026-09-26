@@ -37,7 +37,11 @@ export async function runJob(
   await mkdir(dirAbs, { recursive: true });
   const latticeDb = join(dirAbs, "lattice.db");
 
-  const producer = definition.createProducer({ paths: options.paths });
+  const producer = definition.createProducer({
+    paths: options.paths,
+    fixtureVersion: options.fixtureVersion,
+    root,
+  });
   const all = await loadAll(producer);
   if (all.length === 0) {
     throw new Error("No sequences from producer");

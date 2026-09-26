@@ -1,8 +1,7 @@
 import { basename, join } from "node:path";
 import type { Producer, Sequence } from "@/experiments/producers";
 import type { Atom } from "@/fixtures/encoders";
-import { encoder } from "@/fixtures/v1/encoder";
-import { taxonomy } from "@/fixtures/v1/taxonomy";
+import { type FixtureScheme, loadFixtureScheme } from "@/fixtures/scheme";
 
 export type CsvProducerOptions = {
   /** Directory of tagging-job CSVs, or a single CSV file path. */
@@ -11,6 +10,10 @@ export type CsvProducerOptions = {
   paths?: string[];
   /** When set with path dir, only this transcript stem is yielded. */
   onlyId?: string;
+  /** Fixture scheme version (`v1`, `v2`, …). */
+  fixtureVersion: string;
+  /** Repo root containing `fixtures/<version>/`. */
+  root?: string;
 };
 
 function parseCsvLine(line: string): string[] {
@@ -41,7 +44,11 @@ function parseCsvLine(line: string): string[] {
   return cells;
 }
 
-function rowToAtoms(header: string[], cells: string[]): Array<Atom | null> {
+function rowToAtoms(
+  header: string[],
+  cells: string[],
+  taxonomy: readonly { axis: string }[],
+): Array<Atom | null> {
   const byAxis = new Map<string, string>();
   for (let i = 0; i < header.length; i++) {
     const axis = header[i];
@@ -55,20 +62,35 @@ function rowToAtoms(header: string[], cells: string[]): Array<Atom | null> {
   });
 }
 
-export async function loadSequence(filePath: string): Promise<Sequence> {
+function assertHeaderMatches(
+  filePath: string,
+  header: string[],
+  taxonomy: readonly { axis: string }[],
+): void {
+  const expected = taxonomy.map((t) => t.axis);
+  if (header.length !== expected.length || header.some((h, i) => h !== expected[i])) {
+    throw new Error(
+      `CSV header mismatch in ${filePath}: expected [${expected.join(",")}], got [${header.join(",")}]`,
+    );
+  }
+}
+
+/** Rebuild one sequence from a tagging CSV using the given fixture scheme. */
+export async function loadSequence(filePath: string, scheme: FixtureScheme): Promise<Sequence> {
   const text = await Bun.file(filePath).text();
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   const headerLine = lines[0];
   if (!headerLine) throw new Error(`Empty CSV ${filePath}`);
   const header = parseCsvLine(headerLine);
+  assertHeaderMatches(filePath, header, scheme.taxonomy);
   const symbols: string[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
     const cells = parseCsvLine(line);
-    const atoms = rowToAtoms(header, cells);
+    const atoms = rowToAtoms(header, cells, scheme.taxonomy);
     if (atoms.every((a) => a === null)) continue;
-    symbols.push(encoder.compact(atoms));
+    symbols.push(scheme.encoder.compact(atoms));
   }
   const id = basename(filePath, ".csv");
   return { id, symbols };
@@ -80,10 +102,6 @@ async function resolveFiles(options: CsvProducerOptions): Promise<string[]> {
   }
   const path = options.path;
   if (!path) throw new Error("CsvProducer requires path or paths");
-
-  if (!(await Bun.file(path).exists()) && !(await Bun.file(join(path, ".")).exists())) {
-    // directory existence: try listing
-  }
 
   if (path.endsWith(".csv")) {
     return [path];
@@ -102,15 +120,17 @@ async function resolveFiles(options: CsvProducerOptions): Promise<string[]> {
 
 /**
  * Producer that reads tagging-pipeline CSV jobs (or explicit CSV paths)
- * and yields one Sequence per transcript.
+ * and yields one Sequence per transcript, compacted with the fixture scheme.
  */
 export class CsvProducer implements Producer {
   constructor(private readonly options: CsvProducerOptions) {}
 
   async *sequences(): AsyncGenerator<Sequence> {
+    const root = this.options.root ?? join(import.meta.dir, "..");
+    const scheme = await loadFixtureScheme(root, this.options.fixtureVersion);
     const files = await resolveFiles(this.options);
     for (const filePath of files) {
-      const sequence = await loadSequence(filePath);
+      const sequence = await loadSequence(filePath, scheme);
       if (this.options.onlyId && sequence.id !== this.options.onlyId) continue;
       yield sequence;
     }

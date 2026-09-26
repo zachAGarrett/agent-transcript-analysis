@@ -193,16 +193,16 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   }
 
   const definition = await resolveExperiment(name, version);
-  const { jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
+  const { version: fixtureVersion, jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
   const { paths, matched, selected } = await selectCsvPaths(jobDir, glob, count, pct);
   if (paths.length === 0) {
     throw new Error(`No CSVs matched ${glob} in ${jobDir}`);
   }
 
   console.log(
-    `Running ${definition.name}@${definition.version} on fixture job ${jobId} (${selected}/${matched} files)`,
+    `Running ${definition.name}@${definition.version} on fixture ${fixtureVersion} job ${jobId} (${selected}/${matched} files)`,
   );
-  const result = await runJob(definition, { paths, root: ROOT });
+  const result = await runJob(definition, { paths, fixtureVersion, root: ROOT });
   console.log(`Done: ${result.latticeDb} (${result.sequenceCount} sequences)`);
 }
 
