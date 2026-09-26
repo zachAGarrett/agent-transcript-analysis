@@ -9,7 +9,7 @@ Flags are positional and hand-parsed. Unknown trailing args print usage and exit
 Encode Cursor parent transcripts into CSVs under `fixtures/<version>/runs/<jobId>/`.
 
 ```text
-cli fixtures prepare [-v <version>] (-t <transcriptId> | -a)
+cli fixtures prepare [-v <version>] (-t <transcriptId> | -a) [-c <concurrency>]
 ```
 
 | Flag | Meaning |
@@ -17,6 +17,7 @@ cli fixtures prepare [-v <version>] (-t <transcriptId> | -a)
 | `-v <version>` | Fixture scheme version (directory under `fixtures/`). Omit → latest `v*`. |
 | `-t <transcriptId>` | Encode one parent transcript UUID. |
 | `-a` | Encode every discovered parent transcript. |
+| `-c <concurrency>` | Max concurrent encode calls per transcript (default 8). Useful for v2 Jev. |
 
 Exactly one of `-t` / `-a` is required.
 
@@ -24,8 +25,11 @@ Examples:
 
 ```sh
 bun cli fixtures prepare -v v1 -a
+bun cli fixtures prepare -v v2 -t 3478de7b-79b9-458d-9028-1db767ff17fc -c 12
 bun cli fixtures prepare -t 0a146418-e845-4d84-be97-25f32ac5610c
 ```
+
+**v2** requires `AI_GATEWAY_API_KEY` (Jev Choice for `intent` / `purpose`).
 
 ## `experiments <name>`
 

@@ -2,7 +2,10 @@
 
 Versioned transcript → CSV tagging schemes for experiments.
 
-Current scheme: **v1** (`who`, `intent`, `kind`, `tool`, `sh`, `end`).
+Schemes:
+
+- **v1** — `who`, `intent`, `kind`, `tool`, `sh`, `end` (regex intent)
+- **v2** — adds `purpose`; `intent` / `purpose` via Jev Choice (`AI_GATEWAY_API_KEY`)
 
 ## Usage
 
@@ -10,15 +13,16 @@ From the repo root:
 
 ```sh
 bun cli fixtures prepare -v v1 -a
-bun cli fixtures prepare -v v1 -t <transcript-uuid>
+bun cli fixtures prepare -v v2 -t <transcript-uuid>
+bun cli fixtures prepare -v v2 -t <transcript-uuid> -c 12
 ```
 
-Jobs land under `fixtures/v1/runs/<jobId>/` (gitignored).
+Jobs land under `fixtures/<version>/runs/<jobId>/` (gitignored).
 
 ## Docs
 
 - [How to prepare](../docs/how-to/prepare-fixtures.md)
-- [Fixtures reference (v1)](../docs/reference/fixtures.md)
+- [Fixtures reference](../docs/reference/fixtures.md)
 - [Layout conventions](../docs/reference/layout.md)
 - [Why this pipeline](../docs/explanation/encoding-and-pipelines.md)
 
@@ -28,8 +32,9 @@ Jobs land under `fixtures/v1/runs/<jobId>/` (gitignored).
 | --- | --- |
 | `prepare.ts` | Job writer + discovery helpers |
 | `pipeline.ts` / `encoders.ts` / `taxonomies.ts` | Shared tagging contracts |
-| `v1/` | Current scheme (taxonomy, encoder, loader) |
-| `v1/runs/` | Datetime job CSVs |
+| `v1/` | Regex-intent scheme |
+| `v2/` | Jev intent/purpose scheme |
+| `v*/runs/` | Datetime job CSVs (gitignored) |
 
 ## License
 
