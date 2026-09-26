@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { splitAgentTurns } from "@/experiments/agent-turn-producer";
 import type { Sequence } from "@/experiments/producers";
+import { decoder } from "@/fixtures/v1/decoder";
 import { encoder } from "@/fixtures/v1/encoder";
 
 function compact(partial: Record<string, string>): string {
@@ -28,7 +29,7 @@ describe("splitAgentTurns", () => {
       ],
     };
 
-    const turns = splitAgentTurns(session);
+    const turns = splitAgentTurns(session, decoder);
     expect(turns).toHaveLength(2);
     expect(turns[0]?.meta?.intent).toBe("plan");
     expect(turns[0]?.symbols).toHaveLength(2);

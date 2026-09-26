@@ -24,7 +24,7 @@ Session / composer metadata from `state.vscdb` is **not** encoded (not reliable 
 - One message → one composite unit; units end with `UNIT_DELIMITER` = `|`.
 - Multi-step lattice patterns concatenate units (`unit|unit|`).
 
-Experiments rebuild composites from CSV columns via the version encoder’s `compact`.
+Experiments rebuild composites from CSV columns via the version encoder’s `compact`, using the fixture version from CLI `-fv` / `fixtureVersion` ([`fixtures/scheme.ts`](../../fixtures/scheme.ts)).
 
 ## Prepare behavior
 

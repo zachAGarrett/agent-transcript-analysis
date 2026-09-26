@@ -10,7 +10,7 @@ Experiments train `@khoralabs/tkn` lattices on fixture CSVs. The canonical run a
 | --- | --- |
 | `name` | CLI name / path segment |
 | `version` | Version directory (`v1`) |
-| `createProducer` | Build a `Producer` from CSV paths |
+| `createProducer` | Build a `Producer` from CSV paths + fixture scheme version |
 
 ## Shared runner
 
@@ -29,6 +29,8 @@ Queries and charts (if needed later) should use the lattice SQLite / `@khoralabs
 | --- | --- | --- |
 | `CsvProducer` | `csv-producer.ts` | One sequence per CSV (full session rows) |
 | `AgentTurnProducer` | `agent-turn-producer.ts` | One sequence per agent turn; user intent in `meta.intent` |
+
+Producers take `fixtureVersion` (CLI `-fv`) and load that scheme’s encoder/decoder via [`fixtures/scheme.ts`](../../fixtures/scheme.ts). CSV headers must match the scheme taxonomy axes in order.
 
 `AgentTurnProducer` drops user rows from symbols; keeps preceding `intent:` in `meta`. Rows without `who` are skipped.
 
