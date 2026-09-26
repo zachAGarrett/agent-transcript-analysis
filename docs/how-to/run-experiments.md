@@ -1,6 +1,6 @@
 # How to run experiments
 
-Train and decode on fixture CSVs for `agent-turn` or `session-span` (v1).
+Train a lattice on fixture CSVs for `agent-turn` or `session-span` (v1).
 
 ## Prerequisites
 
@@ -17,31 +17,25 @@ bun cli experiments agent-turn -fv v1 -n 5
 bun cli experiments session-span -fv v1 -n 5
 ```
 
-Uses the latest fixture job under `fixtures/v1/runs/` unless `-fj` is set.
+Uses the latest fixture job under `fixtures/<fv>/runs/` unless `-fj` is set.
 
 ## Pin a fixture job and sample
 
 ```sh
 bun cli experiments agent-turn -fv v1 -fj 2026-09-25T15-27-27Z -n 50
 bun cli experiments session-span -fv v1 -fj 2026-09-25T15-27-27Z -p 20
+bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z
 ```
 
 ## Read results
 
-Artifacts:
+Canonical artifact:
 
 ```text
 experiments/<name>/v1/runs/<jobId>/lattice.db
-experiments/<name>/v1/runs/<jobId>/report.json
 ```
 
-Console prints hub/frequency rankings and comparison metrics. For HTML:
-
-```sh
-bun cli experiments agent-turn charts
-```
-
-See [chart reports](chart-reports.md).
+Console prints sequence count and the lattice path. Query the DB with `@khoralabs/tkn` / SQLite tooling as needed.
 
 ## Prefer CLI over run.ts
 

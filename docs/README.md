@@ -10,7 +10,6 @@ when changing these pages.
 
 - [Prepare fixture CSVs](how-to/prepare-fixtures.md)
 - [Run experiments](how-to/run-experiments.md)
-- [Chart reports](how-to/chart-reports.md)
 
 ## Reference
 

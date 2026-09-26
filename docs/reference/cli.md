@@ -33,7 +33,7 @@ bun cli fixtures prepare -t 0a146418-e845-4d84-be97-25f32ac5610c
 
 ## `experiments <name>`
 
-Train a lattice and write `report.json` for a named experiment.
+Train a lattice (`lattice.db`) for a named experiment.
 
 ```text
 cli experiments <name> [-v <version>] [-fv <fixtureVersion>] [-fj <jobId>]
@@ -58,33 +58,7 @@ Examples:
 ```sh
 bun cli experiments agent-turn -fv v1 -n 5
 bun cli experiments session-span -fv v1 -fj 2026-09-25T15-27-27Z -p 20
-bun cli experiments agent-turn -v v1 -fv v1 -n 50
+bun cli experiments agent-turn -v v1 -fv v2 -fj 2026-09-25T22-55-36Z
 ```
 
-Outputs: `experiments/<name>/<version>/runs/<jobId>/{lattice.db,report.json}`.
-
-## `experiments <name> charts`
-
-Render HTML charts for an existing experiment `report.json` via that experiment’s `renderCharts`.
-
-```text
-cli experiments <name> charts [-v <version>] [-rj <runId>] [--no-open]
-                              [path/to/report.json]
-```
-
-| Flag / arg | Meaning |
-| --- | --- |
-| `-v <version>` | Experiment version. Omit → latest. |
-| `-rj <runId>` | Experiment run under `experiments/<name>/<version>/runs/`. Omit → latest. |
-| `--no-open` | Write `report.html` only; do not open a browser. |
-| `[path]` | Explicit `report.json` path (wins over `-rj`). |
-
-Writes `report.html` next to the JSON, prints the HTML path, then opens it (unless `--no-open`).
-
-Examples:
-
-```sh
-bun cli experiments agent-turn charts
-bun cli experiments session-span charts -rj 2026-09-25T15-28-57Z
-bun cli experiments agent-turn charts --no-open path/to/report.json
-```
+Output: `experiments/<name>/<version>/runs/<jobId>/lattice.db`.

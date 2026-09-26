@@ -1,9 +1,9 @@
 # session-span
 
-Train and decode lattice patterns on full-session sequences (spans may cross turns).
+Train lattice patterns on full-session sequences (spans may cross turns).
 
-Uses `CsvProducer` over session CSVs, then measures compression, hub patterns, and
-`crossTurnShare` (patterns that bridge `who:user` and `who:agent`).
+Uses `CsvProducer` over session CSVs. Claim: sequences may include both user and
+agent rows; patterns that bridge `who:user` and `who:agent` are expected.
 
 ## Install
 
@@ -26,7 +26,6 @@ Preferred entry — CLI from the repo root:
 ```sh
 bun cli experiments session-span -fv v1 -n 5
 bun cli experiments session-span -fv v1 -fj 2026-09-25T15-27-27Z -p 20
-bun cli experiments session-span charts
 ```
 
 Thin wrapper (defaults to a fixture run directory):
@@ -36,22 +35,18 @@ bun experiments/session-span/v1/run.ts
 bun experiments/session-span/v1/run.ts path/to/dir-or-file.csv
 ```
 
-Outputs land under `experiments/session-span/v1/runs/<jobId>/` (`lattice.db`, `report.json`;
-optional `report.html` from charts).
+Canonical artifact: `experiments/session-span/v1/runs/<jobId>/lattice.db`.
 
 ### Layout
 
 | Path | Role |
 | --- | --- |
-| `v1/experiment.ts` | Experiment definition (`name`, producer, report, charts) |
-| `v1/analyze.ts` | Held-out decode metrics and console summary |
-| `v1/charts.ts` | HTML report via `renderCharts` |
+| `v1/experiment.ts` | Experiment definition (`name`, `version`, `createProducer`) |
 | `v1/run.ts` | Direct runner (prefer CLI) |
 | `v1/runs/` | Job artifacts (gitignored) |
 
 More detail: [experiments reference](../../docs/reference/experiments.md),
-[how to run](../../docs/how-to/run-experiments.md),
-[how to chart](../../docs/how-to/chart-reports.md).
+[how to run](../../docs/how-to/run-experiments.md).
 
 ## Contributing
 

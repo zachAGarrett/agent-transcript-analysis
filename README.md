@@ -3,7 +3,7 @@
 Tag Cursor agent transcripts and learn lattice patterns with `@khoralabs/tkn`.
 
 Encode parent chats into versioned fixture CSVs, then run experiments (`agent-turn`,
-`session-span`) that train SQLite lattices and report held-out pattern metrics.
+`session-span`) that train a SQLite lattice (`lattice.db`).
 See [docs/](docs/README.md) for how-tos, reference, and explanation.
 
 ## Table of Contents
@@ -29,12 +29,9 @@ Requires [Bun](https://bun.com). Cursor parent transcripts are read from
 # Encode all parent transcripts (v1 scheme)
 bun cli fixtures prepare -v v1 -a
 
-# Train / decode (sample first 50 CSVs from the latest fixture job)
+# Train a lattice (sample first 50 CSVs from the latest fixture job)
 bun cli experiments agent-turn -fv v1 -n 50
 bun cli experiments session-span -fv v1 -n 50
-
-# HTML charts for the latest experiment report
-bun cli experiments agent-turn charts
 ```
 
 CLI overview: [docs/reference/cli.md](docs/reference/cli.md).
@@ -43,7 +40,7 @@ CLI overview: [docs/reference/cli.md](docs/reference/cli.md).
 
 | Kind | Pages |
 | --- | --- |
-| How-to | [Prepare fixtures](docs/how-to/prepare-fixtures.md), [Run experiments](docs/how-to/run-experiments.md), [Chart reports](docs/how-to/chart-reports.md) |
+| How-to | [Prepare fixtures](docs/how-to/prepare-fixtures.md), [Run experiments](docs/how-to/run-experiments.md) |
 | Reference | [Layout](docs/reference/layout.md), [CLI](docs/reference/cli.md), [Fixtures v1](docs/reference/fixtures.md), [Experiments](docs/reference/experiments.md) |
 | Explanation | [Encoding and pipelines](docs/explanation/encoding-and-pipelines.md) |
 

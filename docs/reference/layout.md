@@ -19,7 +19,7 @@ fixtures/
   pipeline.ts             # Pipeline over an Encoder
   encoders.ts             # Atom, Encoding, UNIT_DELIMITER, EMPTY_SYMBOL
   taxonomies.ts           # TaxonomyEntry helpers
-  v1/                     # current scheme version
+  v1/                     # scheme version
     message.ts
     taxonomy.ts
     encoder.ts
@@ -30,11 +30,14 @@ fixtures/
     runs/                 # gitignored job outputs
       <jobId>/
         <transcriptId>.csv
+  v2/                     # Jev intent/purpose scheme
+    …
+    runs/
 ```
 
 ### Version directories
 
-- Name: `v*` (example: `v1`).
+- Name: `v*` (example: `v1`, `v2`).
 - Latest version for CLI defaults: lexicographic last `fixtures/v*` directory.
 - A version is a self-contained scheme: taxonomy axes, codebook, message shapes, transcript loader.
 
@@ -55,29 +58,26 @@ who,intent,kind,tool,sh,end
 
 Each following row is one encoded message. Empty cells are axes that do not apply (`null` atoms). Values are axis values only (no `axis:` prefix).
 
+v2 header: `who,intent,purpose,kind,tool,sh,end` (see [fixtures reference](fixtures.md)).
+
 ## Experiments
 
 ```text
 experiments/
-  types.ts                # ExperimentDefinition, BuildReportContext
-  run-job.ts              # shared train / decode / report runner
+  types.ts                # ExperimentDefinition
+  run-job.ts              # shared train → lattice.db runner
   pipeline.ts             # ExperimentPipeline over @khoralabs/tkn Lattice
   producers.ts            # Sequence, Producer
   csv-producer.ts         # full-session sequences from CSVs
   agent-turn-producer.ts  # agent-turn projection
-  charts.ts               # shared HTML chart primitives + report IO
   agent-turn/
     README.md
     v1/
       experiment.ts
-      analyze.ts
-      charts.ts
       run.ts
       runs/               # gitignored
         <jobId>/
           lattice.db
-          report.json
-          report.html     # optional, from charts CLI
   session-span/
     README.md
     v1/
@@ -90,7 +90,7 @@ experiments/
 | --- | --- |
 | `experiments/<name>/` | Experiment product (example: `agent-turn`) |
 | `experiments/<name>/<version>/` | Experiment runner version (`v1`) |
-| `…/runs/<jobId>/` | One train/decode job |
+| `…/runs/<jobId>/` | One train job; canonical artifact `lattice.db` |
 
 CLI discovery: a directory under `experiments/<name>/` is a version if it contains `experiment.ts` and is not named `runs` and does not look like a datetime job id.
 
@@ -98,10 +98,8 @@ CLI discovery: a directory under `experiments/<name>/` is a version if it contai
 
 | Module | Shared | Per experiment |
 | --- | --- | --- |
-| Train/decode loop | `run-job.ts` | — |
+| Train loop | `run-job.ts` | — |
 | Producer | `csv-producer.ts`, `agent-turn-producer.ts` | chosen in `experiment.ts` |
-| Report metrics | — | `analyze.ts` |
-| HTML charts | primitives in `charts.ts` | `renderCharts` in `<version>/charts.ts` |
 
 ## Transcript sources (fixtures prepare)
 

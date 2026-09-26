@@ -1,10 +1,10 @@
 # agent-turn
 
-Train and decode lattice patterns on agent-turn sequences (one sequence per agent turn).
+Train lattice patterns on agent-turn sequences (one sequence per agent turn).
 
-Splits full-session CSVs into agent-only turns via `AgentTurnProducer`, then measures
-compression, hub patterns, intent→pattern pairs, and `userAtomLeak` (patterns that
-incorrectly contain `who:user`).
+Splits full-session CSVs into agent-only turns via `AgentTurnProducer`. User intent
+is kept in sequence `meta` (not as lattice symbols). Claim: patterns should stay
+inside agent turns (`userAtomLeak` would mean `who:user` leaked into symbols).
 
 ## Install
 
@@ -27,7 +27,6 @@ Preferred entry — CLI from the repo root:
 ```sh
 bun cli experiments agent-turn -fv v1 -n 5
 bun cli experiments agent-turn -fv v1 -fj 2026-09-25T15-27-27Z -n 50
-bun cli experiments agent-turn charts
 ```
 
 Thin wrapper (defaults to a fixture run directory):
@@ -37,22 +36,18 @@ bun experiments/agent-turn/v1/run.ts
 bun experiments/agent-turn/v1/run.ts path/to/dir-or-file.csv
 ```
 
-Outputs land under `experiments/agent-turn/v1/runs/<jobId>/` (`lattice.db`, `report.json`;
-optional `report.html` from charts).
+Canonical artifact: `experiments/agent-turn/v1/runs/<jobId>/lattice.db`.
 
 ### Layout
 
 | Path | Role |
 | --- | --- |
-| `v1/experiment.ts` | Experiment definition (`name`, producer, report, charts) |
-| `v1/analyze.ts` | Held-out decode metrics and console summary |
-| `v1/charts.ts` | HTML report via `renderCharts` |
+| `v1/experiment.ts` | Experiment definition (`name`, `version`, `createProducer`) |
 | `v1/run.ts` | Direct runner (prefer CLI) |
 | `v1/runs/` | Job artifacts (gitignored) |
 
 More detail: [experiments reference](../../docs/reference/experiments.md),
-[how to run](../../docs/how-to/run-experiments.md),
-[how to chart](../../docs/how-to/chart-reports.md).
+[how to run](../../docs/how-to/run-experiments.md).
 
 ## Contributing
 
