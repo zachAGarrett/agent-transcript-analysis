@@ -110,7 +110,6 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
     let rowCount = 0;
     try {
       await fh.write(`${header}\n`);
-      await fh.sync();
 
       for (let offset = 0; offset < messages.length; offset += concurrency) {
         const batch = messages.slice(offset, offset + concurrency);
@@ -120,7 +119,6 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
         for (const encoding of encodings) {
           if (encoding.atoms.every((atom) => atom === null)) continue;
           await fh.write(`${encodingToCsvRow(encoding)}\n`);
-          await fh.sync();
           rowCount += 1;
         }
         const done = Math.min(offset + concurrency, messages.length);

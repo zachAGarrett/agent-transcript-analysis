@@ -164,8 +164,11 @@ async function cmdFixturesPrepare(args: string[]): Promise<void> {
   if (args.length > 0) usage();
   if ((transcriptId && all) || (!transcriptId && !all)) usage();
   const concurrency = concurrencyRaw !== undefined ? Number(concurrencyRaw) : undefined;
-  if (concurrencyRaw !== undefined && (!Number.isFinite(concurrency) || (concurrency ?? 0) < 1)) {
-    throw new Error("-c must be a positive number");
+  if (
+    concurrencyRaw !== undefined &&
+    (concurrency === undefined || !Number.isInteger(concurrency) || concurrency < 1)
+  ) {
+    throw new Error("-c must be a positive integer");
   }
 
   const version = versionFlag ?? (await latestFixtureVersion(ROOT));
