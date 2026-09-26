@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Encoding } from "@/fixtures/encoders";
 import { Pipeline } from "@/fixtures/pipeline";
@@ -12,6 +12,8 @@ export type PrepareOptions = {
   transcriptIds?: string[];
   all?: boolean;
   root?: string;
+  /** Max concurrent encode/Jev calls per transcript (default 8). */
+  concurrency?: number;
 };
 
 function jobId(now = new Date()): string {
@@ -91,25 +93,48 @@ export async function prepareFixtures(options: PrepareOptions): Promise<{
 
   const pipeline = new Pipeline(mod.encoder as never);
   const header = mod.taxonomy.map((e) => e.axis).join(",");
+  const concurrency = Math.max(1, options.concurrency ?? 8);
   let fileCount = 0;
 
   console.log(`Found ${selected.length} transcripts (of ${allTranscripts.length})`);
-  console.log(`Writing job ${dirRel}`);
+  console.log(`Writing job ${dirRel} (concurrency=${concurrency})`);
 
   for (const transcript of selected) {
-    const encodings: Encoding[] = [];
-    for await (const encoding of pipeline.feed(
-      mod.messagesFromTranscript(transcript.path) as never,
-    )) {
-      if (encoding.atoms.every((atom) => atom === null)) continue;
-      encodings.push(encoding);
+    const messages: unknown[] = [];
+    for await (const message of mod.messagesFromTranscript(transcript.path)) {
+      messages.push(message);
     }
-    const lines = [header, ...encodings.map((e) => encodingToCsvRow(e))];
-    await Bun.write(join(dirAbs, `${transcript.id}.csv`), `${lines.join("\n")}\n`);
+
+    const csvPath = join(dirAbs, `${transcript.id}.csv`);
+    const fh = await open(csvPath, "w");
+    let rowCount = 0;
+    try {
+      await fh.write(`${header}\n`);
+      await fh.sync();
+
+      for (let offset = 0; offset < messages.length; offset += concurrency) {
+        const batch = messages.slice(offset, offset + concurrency);
+        const encodings = await Promise.all(
+          batch.map((message) => pipeline.processOne(message as never)),
+        );
+        for (const encoding of encodings) {
+          if (encoding.atoms.every((atom) => atom === null)) continue;
+          await fh.write(`${encodingToCsvRow(encoding)}\n`);
+          await fh.sync();
+          rowCount += 1;
+        }
+        const done = Math.min(offset + concurrency, messages.length);
+        if (done % 50 < concurrency || done === messages.length) {
+          console.log(`  ${transcript.id}: ${rowCount} rows (${done}/${messages.length} msgs)`);
+        }
+      }
+    } finally {
+      await fh.close();
+    }
     fileCount += 1;
-    if (fileCount % 25 === 0) {
-      console.log(`  wrote ${fileCount}/${selected.length}`);
-    }
+    console.log(
+      `  wrote ${transcript.id}.csv (${rowCount} rows) [${fileCount}/${selected.length}]`,
+    );
   }
 
   console.log(`Done: ${fileCount} CSVs in ${dirRel}`);

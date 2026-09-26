@@ -16,7 +16,7 @@ const ROOT = join(import.meta.dir, "..");
 
 function usage(): never {
   console.error(`Usage:
-  cli fixtures prepare [-v <version>] (-t <transcriptId> | -a)
+  cli fixtures prepare [-v <version>] (-t <transcriptId> | -a) [-c <concurrency>]
   cli experiments <name> [-v <version>] [-fv <fixtureVersion>] [-fj <jobId>]
                          [-g <glob>] [-n <count> | -p <pct>]
   cli experiments <name> charts [-v <version>] [-rj <runId>] [--no-open]
@@ -24,6 +24,7 @@ function usage(): never {
 
 Examples:
   bun cli fixtures prepare -v v1 -a
+  bun cli fixtures prepare -v v2 -t 3478de7b-79b9-458d-9028-1db767ff17fc -c 12
   bun cli fixtures prepare -t 0a146418-e845-4d84-be97-25f32ac5610c
   bun cli experiments agent-turn -fv v1 -n 5
   bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20
@@ -158,9 +159,14 @@ async function selectCsvPaths(
 async function cmdFixturesPrepare(args: string[]): Promise<void> {
   const versionFlag = takeFlag(args, "-v");
   const transcriptId = takeFlag(args, "-t");
+  const concurrencyRaw = takeFlag(args, "-c");
   const all = takeBool(args, "-a");
   if (args.length > 0) usage();
   if ((transcriptId && all) || (!transcriptId && !all)) usage();
+  const concurrency = concurrencyRaw !== undefined ? Number(concurrencyRaw) : undefined;
+  if (concurrencyRaw !== undefined && (!Number.isFinite(concurrency) || (concurrency ?? 0) < 1)) {
+    throw new Error("-c must be a positive number");
+  }
 
   const version = versionFlag ?? (await latestFixtureVersion(ROOT));
   await prepareFixtures({
@@ -168,6 +174,7 @@ async function cmdFixturesPrepare(args: string[]): Promise<void> {
     root: ROOT,
     all: all || undefined,
     transcriptIds: transcriptId ? [transcriptId] : undefined,
+    concurrency,
   });
 }
 
@@ -260,9 +267,11 @@ async function main(): Promise<void> {
   const cmd = args.shift();
   if (cmd === "fixtures") {
     const sub = args.shift();
-    if (sub !== "prepare") usage();
-    await cmdFixturesPrepare(args);
-    return;
+    if (sub === "prepare") {
+      await cmdFixturesPrepare(args);
+      return;
+    }
+    usage();
   }
   if (cmd === "experiments") {
     const name = args.shift();
