@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Lattice } from "@khoralabs/tkn/bun-sqlite";
 import { ExperimentPipeline } from "@/experiments/pipeline";
 import { producerFrom, type Sequence } from "@/experiments/producers";
-import type { ExperimentDefinition, RunJobOptions } from "@/experiments/types";
+import type { ExperimentDefinition, RunJobOptions, RunJobResult } from "@/experiments/types";
 import { RUNS_DIRNAME } from "@/fixtures/prepare";
 
 export function jobId(now = new Date()): string {
@@ -21,25 +21,14 @@ export async function loadAll(producer: {
   return out;
 }
 
-export function splitTrainHeldOut(sequences: Sequence[]): {
-  train: Sequence[];
-  heldOut: Sequence[];
-} {
-  const sorted = [...sequences].sort((a, b) => a.id.localeCompare(b.id));
-  if (sorted.length === 1) {
-    return { train: sorted, heldOut: sorted };
-  }
-  const cut = Math.max(1, Math.floor(sorted.length * 0.8));
-  return { train: sorted.slice(0, cut), heldOut: sorted.slice(cut) };
-}
-
 /**
- * Shared experiment runner: train SQLite lattice, decode held-out, analyze.
+ * Shared experiment runner: train a SQLite lattice on all loaded sequences.
+ * Canonical artifact: lattice.db under experiments/<name>/<version>/runs/<jobId>/.
  */
 export async function runJob(
   definition: ExperimentDefinition,
   options: RunJobOptions,
-): Promise<unknown> {
+): Promise<RunJobResult> {
   const root = options.root ?? join(import.meta.dir, "..");
   const createdAt = new Date();
   const id = jobId(createdAt);
@@ -51,36 +40,20 @@ export async function runJob(
   const producer = definition.createProducer({ paths: options.paths });
   const all = await loadAll(producer);
   if (all.length === 0) {
-    throw new Error(`No sequences from producer ${options.producer.kind}`);
+    throw new Error("No sequences from producer");
   }
 
-  const { train, heldOut } = splitTrainHeldOut(all);
-  console.log(
-    `${definition.name}@${definition.version}: ${all.length} sequences (train=${train.length} heldOut=${heldOut.length})`,
-  );
+  console.log(`${definition.name}@${definition.version}: ${all.length} sequences`);
 
   const lattice = new Lattice({ filename: latticeDb });
   try {
     const pipeline = new ExperimentPipeline(lattice);
-    for await (const _ of pipeline.feed(producerFrom(train))) {
+    for await (const _ of pipeline.feed(producerFrom(all))) {
       // ingest
     }
     lattice.invalidateCompiled();
-
-    const report = definition.buildReport({
-      producer: options.producer,
-      latticeDbRel: `${dirRel}/lattice.db`,
-      trainCount: train.length,
-      heldOutCount: heldOut.length,
-      vocabularySize: lattice.vocabulary().length,
-      hubTokens: lattice.getTopTokens(100),
-      heldOut,
-      decode: pipeline.decode.bind(pipeline),
-    });
-
-    await Bun.write(join(dirAbs, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
-    definition.printAnalysis(report);
-    return report;
+    console.log(`latticeDb=${dirRel}/lattice.db`);
+    return { dir: dirRel, latticeDb: `${dirRel}/lattice.db`, sequenceCount: all.length };
   } finally {
     lattice.close();
   }

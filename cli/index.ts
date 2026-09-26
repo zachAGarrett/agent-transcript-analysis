@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveReportPath, writeAndOpenHtml } from "@/experiments/charts";
 import { runJob } from "@/experiments/run-job";
 import type { ExperimentDefinition } from "@/experiments/types";
 import {
@@ -19,8 +18,6 @@ function usage(): never {
   cli fixtures prepare [-v <version>] (-t <transcriptId> | -a) [-c <concurrency>]
   cli experiments <name> [-v <version>] [-fv <fixtureVersion>] [-fj <jobId>]
                          [-g <glob>] [-n <count> | -p <pct>]
-  cli experiments <name> charts [-v <version>] [-rj <runId>] [--no-open]
-                                [path/to/report.json]
 
 Examples:
   bun cli fixtures prepare -v v1 -a
@@ -28,9 +25,7 @@ Examples:
   bun cli fixtures prepare -t 0a146418-e845-4d84-be97-25f32ac5610c
   bun cli experiments agent-turn -fv v1 -n 5
   bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20
-  bun cli experiments agent-turn charts
-  bun cli experiments session-span charts -rj 2026-09-25T15-28-57Z
-  bun cli experiments agent-turn charts --no-open path/to/report.json
+  bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z
 `);
   process.exit(1);
 }
@@ -181,34 +176,6 @@ async function cmdFixturesPrepare(args: string[]): Promise<void> {
   });
 }
 
-async function cmdExperimentCharts(name: string, args: string[]): Promise<void> {
-  const version = takeFlag(args, "-v");
-  const runId = takeFlag(args, "-rj");
-  const noOpen = takeBool(args, "--no-open");
-  const pathArg = args.find((a) => !a.startsWith("-"));
-  if (pathArg) {
-    args.splice(args.indexOf(pathArg), 1);
-  }
-  if (args.length > 0) usage();
-
-  const definition = await resolveExperiment(name, version);
-  const reportPath = await resolveReportPath({
-    root: ROOT,
-    experiment: definition.name,
-    version: definition.version,
-    runId,
-    path: pathArg,
-  });
-  const file = Bun.file(reportPath);
-  if (!(await file.exists())) {
-    throw new Error(`Report not found: ${reportPath}`);
-  }
-  const report = await file.json();
-  const html = definition.renderCharts(report, { sourcePath: reportPath });
-  const { htmlPath } = await writeAndOpenHtml({ reportPath, html, noOpen });
-  console.log(htmlPath);
-}
-
 async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   const version = takeFlag(args, "-v");
   const fv = takeFlag(args, "-fv");
@@ -226,41 +193,17 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   }
 
   const definition = await resolveExperiment(name, version);
-  const { version: fvResolved, jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
+  const { jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
   const { paths, matched, selected } = await selectCsvPaths(jobDir, glob, count, pct);
   if (paths.length === 0) {
     throw new Error(`No CSVs matched ${glob} in ${jobDir}`);
   }
 
-  const dirRel = jobDir.startsWith(ROOT) ? jobDir.slice(ROOT.length).replace(/^\//, "") : jobDir;
   console.log(
     `Running ${definition.name}@${definition.version} on fixture job ${jobId} (${selected}/${matched} files)`,
   );
-  await runJob(definition, {
-    paths,
-    producer: {
-      kind: "directory",
-      dir: dirRel || `fixtures/${fvResolved}`,
-      glob,
-      sample: {
-        matched,
-        selected,
-        ...(count !== undefined ? { n: count } : {}),
-        ...(pct !== undefined ? { pct } : {}),
-      },
-    },
-    root: ROOT,
-  });
-}
-
-async function cmdExperiments(name: string | undefined, args: string[]): Promise<void> {
-  if (!name) usage();
-  if (args[0] === "charts") {
-    args.shift();
-    await cmdExperimentCharts(name, args);
-    return;
-  }
-  await cmdExperimentsRun(name, args);
+  const result = await runJob(definition, { paths, root: ROOT });
+  console.log(`Done: ${result.latticeDb} (${result.sequenceCount} sequences)`);
 }
 
 async function main(): Promise<void> {
@@ -278,7 +221,8 @@ async function main(): Promise<void> {
   }
   if (cmd === "experiments") {
     const name = args.shift();
-    await cmdExperiments(name, args);
+    if (!name) usage();
+    await cmdExperimentsRun(name, args);
     return;
   }
   usage();
