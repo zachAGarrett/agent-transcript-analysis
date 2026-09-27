@@ -10,6 +10,7 @@ when changing these pages.
 
 - [Prepare fixture CSVs](how-to/prepare-fixtures.md)
 - [Run experiments](how-to/run-experiments.md)
+- [Explore experiment runs](how-to/explore-runs.md)
 
 ## Reference
 
@@ -21,3 +22,4 @@ when changing these pages.
 ## Explanation
 
 - [Encoding and experiment pipelines](explanation/encoding-and-pipelines.md)
+- [Composing run visualizations](explanation/composable-visualizations.md)
