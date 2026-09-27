@@ -17,11 +17,13 @@ See [docs/](docs/README.md) for how-tos, reference, and explanation.
 ## Install
 
 ```sh
+bun run submodules:init
 bun install
 ```
 
-Requires [Bun](https://bun.com). Cursor parent transcripts are read from
-`~/.cursor/projects/*/agent-transcripts/` when preparing fixtures.
+Requires [Bun](https://bun.com). `vendor/statespace` is a git submodule (`@statespace/core`).
+Cursor parent transcripts are read from `~/.cursor/projects/*/agent-transcripts/` when
+preparing fixtures.
 
 ## Usage
 
