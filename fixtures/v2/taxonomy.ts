@@ -1,5 +1,5 @@
+import { classifyIntentWithJev, classifyPurposeWithJev } from "../../api/jev";
 import type { TaxonomyEntry } from "../taxonomies";
-import { classifyIntentWithJev, classifyPurposeWithJev } from "./jev";
 import { INTENT_LABELS, PURPOSE_LABELS } from "./labels";
 import type { Message } from "./message";
 

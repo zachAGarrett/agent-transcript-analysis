@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { argmaxLabel, resolveChoiceLabel } from "../../api/jev";
 import { buildCodebook, EMPTY_SYMBOL, toBase36, UNIT_DELIMITER } from "../encoders";
 import { decoder } from "./decoder";
 import { encodeAtom, encoder, resolveAtom } from "./encoder";
-import { argmaxLabel, resolveChoiceLabel } from "./jev";
 import { summarizeToolInput } from "./load";
 import { classifyShellFamily, knownAtoms, taxonomy } from "./taxonomy";
 

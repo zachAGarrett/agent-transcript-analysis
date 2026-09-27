@@ -110,7 +110,7 @@ Choice criteria use structured `what` / `not_for` / `examples` ([Advanced: struc
 | --- | --- |
 | `v2/load.ts` | Loader + `summarizeToolInput` |
 | `v2/labels.ts` | Closed sets + Choice criteria |
-| `v2/jev.ts` | AI Gateway systemone client (argmax Choice labels) |
+| `api/jev/` | AI Gateway systemone client (argmax Choice labels); used by v2 taxonomy and explorer plan tree |
 | `v2/taxonomy.ts` | Axes (Jev for intent/purpose) |
 
 ## Shared modules

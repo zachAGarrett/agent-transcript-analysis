@@ -5,8 +5,8 @@ import {
   PURPOSE_CRITERIA,
   PURPOSE_LABELS,
   type PurposeLabel,
-} from "./labels";
-import type { AgentMessage, UserMessage } from "./message";
+} from "../../fixtures/v2/labels";
+import type { AgentMessage, UserMessage } from "../../fixtures/v2/message";
 
 /** Jev list price (AI Gateway); used for estimated $ even when billed as free. */
 export const JEV_INPUT_USD_PER_MILLION = 0.042;
@@ -36,7 +36,7 @@ export type PurposeClassification = {
   metrics: JevCallMetrics;
 };
 
-type ChoiceAnswer = {
+export type ChoiceAnswer = {
   type?: string;
   choice?: string;
   probabilities?: Record<string, number>;
@@ -125,7 +125,8 @@ function isRetryableStatus(status: number): boolean {
   );
 }
 
-async function systemOneChoice(params: {
+/** Shared SystemOne Choice call (retries, usage metrics). */
+export async function systemOneChoice(params: {
   state: unknown;
   questionId: string;
   instructions: { question: string; focus: string };
@@ -133,7 +134,7 @@ async function systemOneChoice(params: {
   maxRetries?: number;
 }): Promise<{
   answer: ChoiceAnswer;
-  metrics: Omit<JevCallMetrics, "estimatedUsd"> & { estimatedUsd: number };
+  metrics: JevCallMetrics;
 }> {
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) throw new Error("AI_GATEWAY_API_KEY is required for Jev classification");
