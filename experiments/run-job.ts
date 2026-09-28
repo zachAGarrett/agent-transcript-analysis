@@ -55,6 +55,8 @@ export async function runJob(
     for await (const _ of pipeline.feed(producerFrom(all))) {
       // ingest
     }
+    // DegreeScorer side effect: write hub_score (tkn default; no local math).
+    lattice.getTopTokens(1);
     lattice.invalidateCompiled();
     console.log(`latticeDb=${dirRel}/lattice.db`);
     return { dir: dirRel, latticeDb: `${dirRel}/lattice.db`, sequenceCount: all.length };

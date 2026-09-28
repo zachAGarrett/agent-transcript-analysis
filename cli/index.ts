@@ -2,6 +2,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runJob } from "@/experiments/run-job";
+import { scoreLatticeDb } from "@/experiments/score-lattice";
 import type { ExperimentDefinition } from "@/experiments/types";
 import {
   fixtureRunsDir,
@@ -18,6 +19,7 @@ function usage(): never {
   cli fixtures prepare [-v <version>] (-t <transcriptId> | -a) [-c <concurrency>]
   cli experiments <name> [-v <version>] [-fv <fixtureVersion>] [-fj <jobId>]
                          [-g <glob>] [-n <count> | -p <pct>]
+  cli score <path-to-lattice.db>
 
 Examples:
   bun cli fixtures prepare -v v1 -a
@@ -26,6 +28,7 @@ Examples:
   bun cli experiments agent-turn -fv v1 -n 5
   bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20
   bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z
+  bun cli score experiments/agent-turn/v1/runs/<jobId>/lattice.db
 `);
   process.exit(1);
 }
@@ -223,6 +226,14 @@ async function main(): Promise<void> {
     const name = args.shift();
     if (!name) usage();
     await cmdExperimentsRun(name, args);
+    return;
+  }
+  if (cmd === "score") {
+    const path = args.shift();
+    if (!path || args.length > 0) usage();
+    const abs = path.startsWith("/") ? path : join(ROOT, path);
+    const { scored } = scoreLatticeDb(abs);
+    console.log(`Scored ${abs} (${scored} nodes with hub_score ≠ 0)`);
     return;
   }
   usage();
