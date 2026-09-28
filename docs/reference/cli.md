@@ -62,3 +62,19 @@ bun cli experiments agent-turn -v v1 -fv v2 -fj 2026-09-25T22-55-36Z
 ```
 
 Output: `experiments/<name>/<version>/runs/<jobId>/lattice.db`.
+
+New runs call tkn `getTopTokens` after ingest so `hub_score` is populated (DegreeScorer).
+
+## `score <path-to-lattice.db>`
+
+Persist hub scores on an existing lattice via a writable tkn Lattice (`getTopTokens` → DegreeScorer). Use for runs created before scoring was wired into `runJob`.
+
+```text
+cli score <path-to-lattice.db>
+```
+
+Path may be absolute or relative to the repo root.
+
+```sh
+bun cli score experiments/agent-turn/v1/runs/<jobId>/lattice.db
+```

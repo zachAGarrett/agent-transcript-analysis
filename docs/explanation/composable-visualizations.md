@@ -45,10 +45,10 @@ and bin interpretation are derived from that registry — not duplicated switche
 
 | Kind | Domain | Codomain | Example |
 | --- | --- | --- | --- |
-| Load | `query` | `summary` + grain/measure | `load_pattern_mass` |
-| Pushforward | `summary` + pattern, `!hasTopK` | `summary` + length | `rollup_length` |
+| Load | `query` | `summary` + grain/measure | `load_pattern_mass`, `load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree` |
+| Pushforward | `summary` + pattern, `!hasTopK` | `summary` + length | `rollup_length` (any pattern source) |
 | Order (summary) | `summary` + pattern, `!hasTopK` | same + `rankedByLength` | `rank_by_length` |
-| Partition × display | `summary` + pattern mass/vocab, `!hasTopK` | displayed + `pattern-by-length` + `hasTopK` | `partition_by_length` |
+| Partition × display | `summary` + pattern, `!hasTopK` | displayed + `pattern-by-length` + `hasTopK` | `partition_by_length` |
 | Display cut | summary / faceted | displayed / faceted + `hasTopK` | `top_k_*` |
 | Reload | committed pattern top-k | committed length summary | `re_rollup` |
 | Session tip | committed/selected + context | selected / detail flags | `select_bin`, `open_pattern_detail` |
@@ -60,19 +60,27 @@ That composition stays illegal in `enabled`.
 
 ## Path space (`packages/lattice-viz`)
 
-Construction starts at `query`. Morphisms include sources (`load_pattern_mass`, …),
+Construction starts at `query`. Morphisms include sources (`load_pattern_mass`,
+`load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree`, `load_run_scalars`),
 `rollup_length`, `rank_by_length`, `partition_by_length`, `top_k_*`, `normalize`,
-`facet_runs`, and `commit`. After commit, construction follow-ups (`focus_run`,
-`drill_length_patterns`, `re_rollup`) extend the plan; session morphisms only move the tip.
-Illegal orders never appear in `enabled`.
+`facet_runs`, and `commit`. Length construction applies to every pattern source (mass,
+vocab, outgoing/incoming edge weight, hub score)—not only mass/vocab. After commit,
+construction follow-ups (`focus_run`, `drill_length_patterns`, `re_rollup`) extend the plan;
+session morphisms only move the tip. Illegal orders never appear in `enabled`.
 
 Pattern labels are injected via `setPatternLabeler` (fixture-aware decoding in
 `app/adapters/decode.ts`). The kernel itself does not import fixture schemes.
 
-Preset named paths (overview, patterns, lengths, patterns-by-length, …) are macros in
-`packages/lattice-viz` presets for docs and tests only. `patterns-by-length` is
-`load_pattern_mass → partition_by_length → commit` (top patterns within each length), not a
-length histogram.
+`hub_score` is written by `@khoralabs/tkn`’s `DegreeScorer` when a writable Lattice calls
+`getTopTokens` (experiment `runJob` and `bun cli score <lattice.db>`). This repo does not
+reimplement hub math. `load_hub` charts that column; `load_in_degree` / `load_edge_weight`
+are SQL aggregates over `edges.weight`.
+
+Preset named paths (overview, patterns, vocabulary, hubs, inflows, connectivity,
+lengths, lengths-by-edge, lengths-by-hub, patterns-by-length, …) are macros in
+`packages/lattice-viz` presets. The explorer shows starter chips for the common ones.
+`patterns-by-length` is `load_pattern_mass → partition_by_length → commit` (top patterns
+within each length), not a length histogram.
 
 ## Package layout
 
@@ -99,3 +107,5 @@ Dependency direction: `viz-algebra` ← `lattice-viz` ← `app/adapters` ← `ap
 
 Vocabulary grows with primitives under contracts. Stored `token_count` is overlapping
 mass, not message counts. Edge charts use stored weights, not transition probabilities.
+Hub charts use tkn `hub_score` (default `log1p` out-degree), not PageRank unless the
+Lattice is constructed with `PageRankScorer`.

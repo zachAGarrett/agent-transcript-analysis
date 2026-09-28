@@ -33,12 +33,14 @@ bun cli fixtures prepare -v v2 -t <transcript-uuid> -c 12
 
 bun cli experiments agent-turn -fv v1 -n 50
 bun cli experiments session-span -fv v1 -fj <fixtureJobId> -p 20
+bun cli score experiments/agent-turn/v1/runs/<jobId>/lattice.db
 ```
 
 `-n` and `-p` are mutually exclusive. Omit `-fj` → latest fixture job under that
 version’s `runs/`. **v2** prepare needs `AI_GATEWAY_API_KEY`.
 
-Each experiment run writes `experiments/<name>/<version>/runs/<jobId>/lattice.db`.
+Each experiment run writes `experiments/<name>/<version>/runs/<jobId>/lattice.db`
+and scores hubs via tkn `getTopTokens`. Use `cli score` to rescore older lattices.
 
 ## Doc map (read these, do not duplicate)
 
