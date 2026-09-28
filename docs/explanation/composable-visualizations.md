@@ -2,16 +2,18 @@
 
 Views are **typed morphism paths over a tip continuum**, not a fixed menu of chart modes.
 Reusable bin algebra lives in [`packages/viz-algebra`](../../packages/viz-algebra/); the
-lattice exploration kernel (path space, interpret, charts, session) lives in
+declarative definition→statespace bridge lives in
+[`packages/morphism-space`](../../packages/morphism-space/); the lattice exploration kernel
+(path state, domain morphisms, interpret, charts, session) lives in
 [`packages/lattice-viz`](../../packages/lattice-viz/). Bun/SQLite I/O, fixture decoding, and
 Jev path policy live in [`app/adapters`](../../app/adapters/); the React explorer holds a
 canonical [`ExplorationSession`](../../packages/lattice-viz/src/session/exploration.ts).
 
-A path space (`@statespace/core`) exposes only contract-legal extensions via `enabled`;
-Jev (when `AI_GATEWAY_API_KEY` is set) chooses among those names, and the rules fallback
-only auto-applies when the next step is forced (unique legal move or `commit`). React
-renders the current tip; interpret turns the **compiled plan** into SQL + algebra
-(`merge` / `rollup` / `topWithRemainder` / `normalize`).
+A path space (`@statespace/core`, compiled via `@workstream/morphism-space`) exposes only
+contract-legal extensions via `enabled`; Jev (when `AI_GATEWAY_API_KEY` is set) chooses
+among those names, and the rules fallback only auto-applies when the next step is forced
+(unique legal move or `commit`). React renders the current tip; interpret turns the
+**compiled plan** into SQL + algebra (`merge` / `rollup` / `topWithRemainder` / `normalize`).
 
 ## Tip continuum vs construction plan
 
@@ -38,10 +40,13 @@ Different runs are **facets**, never pooled counts.
 
 ## Contracts and the morphism registry
 
-Each morphism is defined once in `packages/lattice-viz` (`morphisms/registry.ts`) with
-phase (`construction` | `display` | `session`), criteria/copy, domain→codomain contract,
-guard, tip effect, and optional interpret handler. Transitions, Jev criteria, reload flags,
-and bin interpretation are derived from that registry — not duplicated switches.
+Each lattice morphism is defined once in `packages/lattice-viz` (`morphisms/registry.ts`)
+with phase (`construction` | `display` | `session`), criteria/copy, domain→codomain
+contract, `available.when` / `available.otherwise`, tip effect, and optional interpret
+handler. `@workstream/morphism-space` compiles those definitions into a statespace plus
+shared projections (`byName`, criteria, contracts, `enabledNames`, `apply`, session
+names). Lattice-specific SQL, bin algebra, plan replay, and `InterpretCtx` stay in
+`lattice-viz` — they do not move into the generic package.
 
 | Kind | Domain | Codomain | Example |
 | --- | --- | --- | --- |
@@ -87,7 +92,8 @@ within each length), not a length histogram.
 ```text
 packages/
   viz-algebra/          # Bin, Summary, merge/rollup/topWithRemainder/normalize
-  lattice-viz/          # PathState, morphisms, interpret, charts, ExplorationSession
+  morphism-space/       # defineMorphisms + createMorphismSpace (@statespace/core glue)
+  lattice-viz/          # PathState, domain morphisms, interpret, charts, ExplorationSession
 app/
   adapters/             # RunStore (Bun SQLite), decode, Jev classify
   session/              # Explorer session helpers over ExplorationSession
@@ -95,8 +101,16 @@ app/
   server.ts             # Bun.serve API
 ```
 
-Dependency direction: `viz-algebra` ← `lattice-viz` ← `app/adapters` ← `app` (server/UI).
-`@statespace/core` is a peer of `lattice-viz` only.
+Dependency direction:
+
+`@statespace/core` → `@workstream/morphism-space` → `@workstream/lattice-viz` → `app`
+
+(`viz-algebra` is a peer of `lattice-viz` for bin algebra only.)
+
+The reusable layer owns definition/registry/statespace glue. Domain packages own state
+vocabulary, availability predicates, effects, interpretation orchestration, SQL, and
+algebra. Contract `domain`/`codomain` strings remain descriptive metadata; executable
+legality comes from typed `available.when` predicates.
 
 ## Dependency
 

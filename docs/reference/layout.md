@@ -8,11 +8,24 @@ Reference for repository paths used by the CLI, fixtures, and experiments.
 | --- | --- |
 | `cli/index.ts` | Repo CLI (`bun cli` / package `bin.cli`) |
 | `packages/viz-algebra/` | Pure bin algebra (`@workstream/viz-algebra`) |
+| `packages/morphism-space/` | Declarative morphism → statespace glue (`@workstream/morphism-space`) |
 | `packages/lattice-viz/` | Path space, interpret, charts (`@workstream/lattice-viz`) |
 | `app/` | Lattice explorer (server, adapters, React UI) |
 | `fixtures/` | Versioned tagging schemes + prepare pipeline |
 | `experiments/` | Shared experiment runtime + named experiments |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
+
+### Package dependency direction
+
+```text
+@statespace/core → @workstream/morphism-space → @workstream/lattice-viz → app
+                   @workstream/viz-algebra ───↗
+```
+
+`morphism-space` owns `defineMorphisms` / `createMorphismSpace` (definitions, availability
+constraints, transform effects, registry projections). `lattice-viz` owns PathState,
+domain morphisms, SQL, interpret, plan replay, and charts. Do not move visualization
+algebra or session compilers into `morphism-space`.
 
 ## Fixtures
 
