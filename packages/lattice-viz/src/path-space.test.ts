@@ -155,6 +155,33 @@ describe("path space", () => {
       "commit",
     ]);
   });
+  test("hub and inflow presets load graph measures", () => {
+    expect(presetPaths.hubs?.map((s) => s.name)).toEqual(["load_hub", "top_k_10", "commit"]);
+    expect(presetPaths.inflows?.map((s) => s.name)).toEqual([
+      "load_in_degree",
+      "top_k_10",
+      "commit",
+    ]);
+    expect(presetPaths["lengths-by-edge"]?.map((s) => s.name)).toEqual([
+      "load_edge_weight",
+      "rollup_length",
+      "commit",
+    ]);
+  });
+  test("edge-weight summary enables length rollup and re_rollup after top-k", () => {
+    const afterLoad = applyPath(initialPathState, "load_edge_weight");
+    expect(afterLoad.ok).toBe(true);
+    if (!afterLoad.ok) return;
+    expect(enabledNames(afterLoad.state)).toContain("rollup_length");
+    let state = afterLoad.state;
+    for (const name of ["top_k_10", "commit"] as const) {
+      const next = applyPath(state, name);
+      expect(next.ok).toBe(true);
+      if (!next.ok) return;
+      state = next.state;
+    }
+    expect(enabledNames(state)).toContain("re_rollup");
+  });
   test("preset paths parse and commit", () => {
     for (const steps of Object.values(presetPaths)) {
       const { plan, state } = parsePathPlan({ steps, runs: ["run-a"] }, ["run-a"]);
@@ -446,7 +473,7 @@ describe("morphism contracts", () => {
     const afterTop = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "top_k_1", params: { limit: 1 } }],
       bins,
-      { mass: 105, nodes: 2, edgeWeight: 0 },
+      { mass: 105, nodes: 2, edgeWeight: 0, hubScore: 0 },
     );
     expect(afterTop.bins.map((b) => b.id ?? b.key)).toEqual([1, "other"]);
 
@@ -457,7 +484,7 @@ describe("morphism contracts", () => {
         { name: "re_rollup" },
       ],
       bins,
-      { mass: 105, nodes: 2, edgeWeight: 0 },
+      { mass: 105, nodes: 2, edgeWeight: 0, hubScore: 0 },
     );
     expect(afterReload.bins.some((b) => b.key === "2" && b.value === 5)).toBe(true);
     expect(afterReload.bins.reduce((sum, b) => sum + b.value, 0)).toBe(105);

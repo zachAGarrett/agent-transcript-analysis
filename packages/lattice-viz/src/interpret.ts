@@ -5,17 +5,21 @@ import type { InterpretCtx } from "./morphisms/types";
 import type { PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
 
+type Totals = { mass: number; nodes: number; edgeWeight: number; hubScore: number };
+
+function totalForMeasure(measure: PathState["measure"], totals: Totals): number {
+  if (measure === "vocabulary") return totals.nodes;
+  if (measure === "edge-weight" || measure === "in-edge-weight") return totals.edgeWeight;
+  if (measure === "hub-score") return totals.hubScore;
+  return totals.mass;
+}
+
 /** Fallback for ad-hoc top_k_N steps (tests) not registered as discrete morphisms. */
 function applyTopK(ctx: InterpretCtx, step: PathStep): InterpretCtx {
   const registered = morphismByName.get(step.name);
   if (registered?.interpret) return registered.interpret(ctx, step);
   const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-  const total =
-    ctx.measure === "vocabulary"
-      ? ctx.totals.nodes
-      : ctx.measure === "edge-weight"
-        ? ctx.totals.edgeWeight
-        : ctx.totals.mass;
+  const total = totalForMeasure(ctx.measure, ctx.totals);
   if (ctx.summary.grain === "pattern-by-length") {
     return { ...ctx, limit, hasTopK: true, sql: `${ctx.sql}\n-- top_k_${limit}` };
   }
@@ -49,6 +53,8 @@ export type InterpretedFacet = {
 function unitFor(measure: PathState["measure"]): string {
   if (measure === "vocabulary") return "patterns";
   if (measure === "edge-weight") return "outgoing edge weight";
+  if (measure === "in-edge-weight") return "incoming edge weight";
+  if (measure === "hub-score") return "hub score";
   return "stored counts";
 }
 
@@ -56,7 +62,7 @@ function unitFor(measure: PathState["measure"]): string {
 export function interpretSummary(
   steps: PathStep[],
   patternBins: Bin[],
-  totals: { mass: number; nodes: number; edgeWeight: number },
+  totals: Totals,
 ): InterpretedFacet {
   let ctx: InterpretCtx = {
     source: "none",
@@ -91,12 +97,7 @@ export function interpretSummary(
 
   const binValue = (bin: Bin) => (ctx.measure === "vocabulary" ? 1 : bin.value);
   const measure = ctx.measure === "none" ? "stored-count" : ctx.measure;
-  const total =
-    ctx.measure === "vocabulary"
-      ? totals.nodes
-      : ctx.measure === "edge-weight"
-        ? totals.edgeWeight
-        : totals.mass;
+  const total = totalForMeasure(ctx.measure, totals);
 
   ctx.summary = {
     scope: "run",

@@ -35,7 +35,7 @@ export type InterpretCtx = {
   summary: Summary;
   displayTotal: number;
   patternBins: Bin[];
-  totals: { mass: number; nodes: number; edgeWeight: number };
+  totals: { mass: number; nodes: number; edgeWeight: number; hubScore: number };
 };
 
 export type MorphismDef = {

@@ -73,7 +73,7 @@ export {
   SESSION_MORPHISMS,
 } from "./path-state";
 export { patternLengthKey, patternsByLength } from "./pattern-length";
-export { presetPaths } from "./presets";
+export { explorerStarterPresets, presetPaths } from "./presets";
 
 export type {
   DisplaySpec,

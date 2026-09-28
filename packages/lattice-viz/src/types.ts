@@ -18,6 +18,7 @@ export type Run = {
   edges: number;
   edgeWeight: number;
   maxWeight: number;
+  hubScore: number;
   scored: number;
   fixture: string | null;
   train: number | null;

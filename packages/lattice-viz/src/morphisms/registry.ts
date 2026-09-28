@@ -5,6 +5,18 @@ import { patternLengthKey, patternsByLength } from "../pattern-length";
 import type { PathStep } from "../types";
 import type { InterpretCtx, MorphismDef } from "./types";
 
+/** Pattern-level sources (excludes query tip and run overview). */
+function isPatternSource(s: PathState): boolean {
+  return s.source !== "none" && s.source !== "run-scalars";
+}
+
+function totalForMeasure(measure: PathState["measure"], totals: InterpretCtx["totals"]): number {
+  if (measure === "vocabulary") return totals.nodes;
+  if (measure === "edge-weight" || measure === "in-edge-weight") return totals.edgeWeight;
+  if (measure === "hub-score") return totals.hubScore;
+  return totals.mass;
+}
+
 /** Append a construction/display step to the render plan. */
 function append(state: PathState, name: string, params?: Record<string, unknown>): PathState {
   const step: PathStep = params ? { name, params } : { name };
@@ -131,12 +143,7 @@ const topK = (n: 5 | 10 | 20): MorphismDef => ({
     ),
   interpret: (ctx, step) => {
     const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-    const total =
-      ctx.measure === "vocabulary"
-        ? ctx.totals.nodes
-        : ctx.measure === "edge-weight"
-          ? ctx.totals.edgeWeight
-          : ctx.totals.mass;
+    const total = totalForMeasure(ctx.measure, ctx.totals);
     let summary = ctx.summary;
     if (ctx.rankedByLength && summary.grain === "pattern") {
       summary = { ...summary, bins: topInOrder(summary.bins, total, limit) };
@@ -163,9 +170,9 @@ export const morphismDefs: MorphismDef[] = [
     "load_pattern_mass",
     {
       label: "Pattern mass",
-      what: "Load patterns weighted by stored token_count",
-      not_for: "Vocabulary counts, edge weights, or run scalars",
-      examples: ["Where the count mass lives", "Dominant patterns"],
+      what: "Load patterns weighted by stored token_count (overlapping emission mass)",
+      not_for: "Vocabulary presence, edge weights, hub scores, or run scalars",
+      examples: ["Where the count mass lives", "Dominant patterns", "Most frequent patterns"],
     },
     {
       domain: "query · source none",
@@ -178,9 +185,9 @@ export const morphismDefs: MorphismDef[] = [
     "load_pattern_vocab",
     {
       label: "Pattern vocabulary",
-      what: "Load patterns as unit vocabulary counts",
-      not_for: "Mass-weighted or edge views",
-      examples: ["Vocabulary size by pattern", "How many distinct patterns"],
+      what: "Load patterns as unit presence (each pattern counts as 1)",
+      not_for: "Mass-weighted, edge, or hub views",
+      examples: ["Distinct patterns only", "Vocabulary without mass", "Rare but present patterns"],
     },
     {
       domain: "query · source none",
@@ -192,10 +199,10 @@ export const morphismDefs: MorphismDef[] = [
   loadDef(
     "load_edge_weight",
     {
-      label: "Edge weight",
-      what: "Load patterns by outgoing edge weight",
-      not_for: "Token count mass or vocabulary",
-      examples: ["Connectivity", "Graph hubs"],
+      label: "Outgoing edge weight",
+      what: "Load patterns by sum of outgoing transition weights (branching / junctions)",
+      not_for: "Incoming sinks, hub_score centrality, or token mass",
+      examples: ["Outgoing connectivity", "Patterns that branch onward", "Reusable junctions"],
     },
     {
       domain: "query · source none",
@@ -203,6 +210,40 @@ export const morphismDefs: MorphismDef[] = [
     },
     { grain: "pattern", measure: "edge-weight", source: "edge-weight" },
     "SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e ON e.from_id = n.id",
+  ),
+  loadDef(
+    "load_hub",
+    {
+      label: "Hub score",
+      what: "Load patterns by hub_score (tkn DegreeScorer: log1p outgoing weight)",
+      not_for: "Raw edge weight sums, inbound sinks, or frequency mass",
+      examples: ["Central patterns", "Hub patterns", "Rare but well-connected"],
+    },
+    {
+      domain: "query · source none",
+      codomain: "summary · pattern · hub-score · pattern-hub",
+    },
+    { grain: "pattern", measure: "hub-score", source: "pattern-hub" },
+    "SELECT id, token, hub_score value FROM nodes",
+  ),
+  loadDef(
+    "load_in_degree",
+    {
+      label: "Incoming edge weight",
+      what: "Load patterns by sum of incoming transition weights (sinks / attractors)",
+      not_for: "Outgoing junctions, hub_score, or token mass",
+      examples: [
+        "Incoming connectivity",
+        "Patterns everything converges into",
+        "Sinks and attractors",
+      ],
+    },
+    {
+      domain: "query · source none",
+      codomain: "summary · pattern · in-edge-weight · in-edge-weight",
+    },
+    { grain: "pattern", measure: "in-edge-weight", source: "in-edge-weight" },
+    "SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e ON e.to_id = n.id",
   ),
   loadDef(
     "load_run_scalars",
@@ -225,19 +266,14 @@ export const morphismDefs: MorphismDef[] = [
     criteria: {
       label: "By length",
       what: "Group pattern summary by composite length",
-      not_for: "After top-k, or on run-scalars/edges",
+      not_for: "After top-k, or on run-scalars",
       examples: ["Length distribution", "How long are patterns"],
     },
     contract: {
-      domain: "summary · pattern · !hasTopK · mass|vocab",
+      domain: "summary · pattern · !hasTopK",
       codomain: "summary · length",
     },
-    guard: (s) =>
-      s.tip === "summary" &&
-      s.grain === "pattern" &&
-      !s.hasTopK &&
-      s.source !== "run-scalars" &&
-      s.source !== "edge-weight",
+    guard: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
     guardMessage: "Rollup needs pattern summary before top-k.",
     effect: (s) =>
       append({ ...s, tip: "summary", grain: "length", rankedByLength: false }, "rollup_length"),
@@ -259,7 +295,7 @@ export const morphismDefs: MorphismDef[] = [
       examples: ["What are the longest patterns?", "Longest patterns"],
     },
     contract: {
-      domain: "summary · pattern · !hasTopK · !rankedByLength · mass|vocab",
+      domain: "summary · pattern · !hasTopK · !rankedByLength",
       codomain: "summary · pattern · rankedByLength",
     },
     guard: (s) =>
@@ -267,8 +303,8 @@ export const morphismDefs: MorphismDef[] = [
       s.grain === "pattern" &&
       !s.hasTopK &&
       !s.rankedByLength &&
-      (s.source === "pattern-mass" || s.source === "pattern-vocab"),
-    guardMessage: "Rank by length needs pattern mass/vocab summary before top-k.",
+      isPatternSource(s),
+    guardMessage: "Rank by length needs pattern summary before top-k.",
     effect: (s) =>
       append({ ...s, tip: "summary", grain: "pattern", rankedByLength: true }, "rank_by_length"),
     interpret: (ctx) => ({
@@ -289,16 +325,12 @@ export const morphismDefs: MorphismDef[] = [
       examples: ["Most important patterns by length", "Top patterns per length"],
     },
     contract: {
-      domain: "summary · pattern · !hasTopK · mass|vocab",
+      domain: "summary · pattern · !hasTopK",
       codomain: "displayed|faceted · pattern-by-length · hasTopK",
       reload: true,
     },
-    guard: (s) =>
-      s.tip === "summary" &&
-      s.grain === "pattern" &&
-      !s.hasTopK &&
-      (s.source === "pattern-mass" || s.source === "pattern-vocab"),
-    guardMessage: "Partition by length needs pattern mass/vocab summary before top-k.",
+    guard: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
+    guardMessage: "Partition by length needs pattern summary before top-k.",
     effect: (s) =>
       append(
         {
@@ -518,7 +550,7 @@ export const morphismDefs: MorphismDef[] = [
       examples: ["Patterns in this length"],
     },
     contract: {
-      domain: "selected · grain length · lengthKey · mass|vocab",
+      domain: "selected · grain length · lengthKey",
       codomain: "committed · pattern-by-length · hasTopK",
       reload: true,
     },
@@ -527,7 +559,7 @@ export const morphismDefs: MorphismDef[] = [
       (s.tip === "selected" || s.hasSelection) &&
       s.selectionLengthKey.length > 0 &&
       s.selectionLengthKey !== "other" &&
-      (s.source === "pattern-mass" || s.source === "pattern-vocab"),
+      isPatternSource(s),
     guardMessage: "Drill needs a length-bin selection on a pattern source.",
     effect: (s, context) => {
       const lengthKey = lengthKeyFromContext(context, s.selectionLengthKey);
@@ -603,7 +635,7 @@ export const morphismDefs: MorphismDef[] = [
       examples: ["Show lengths instead"],
     },
     contract: {
-      domain: "committed|selected|displayed · pattern · hasTopK · mass|vocab",
+      domain: "committed|selected|displayed · pattern · hasTopK",
       codomain: "committed · length · !hasTopK",
       reload: true,
     },
@@ -611,7 +643,7 @@ export const morphismDefs: MorphismDef[] = [
       (s.tip === "committed" || s.tip === "selected" || s.tip === "displayed") &&
       s.grain === "pattern" &&
       s.hasTopK &&
-      (s.source === "pattern-mass" || s.source === "pattern-vocab"),
+      isPatternSource(s),
     guardMessage: "Re-rollup from pattern top-k.",
     effect: (s) =>
       append(

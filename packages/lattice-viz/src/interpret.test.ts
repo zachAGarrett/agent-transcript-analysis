@@ -13,7 +13,7 @@ describe("interpret rank_by_length", () => {
     const ranked = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "rank_by_length" }],
       bins,
-      { mass: total, nodes: 3, edgeWeight: 0 },
+      { mass: total, nodes: 3, edgeWeight: 0, hubScore: 0 },
     );
     expect(ranked.bins.map((b) => b.id)).toEqual([2, 3, 1]);
     expect(ranked.bins[0]?.label).toBe("2 · Pattern #2");
@@ -25,7 +25,7 @@ describe("interpret rank_by_length", () => {
         { name: "top_k_1", params: { limit: 1 } },
       ],
       bins,
-      { mass: total, nodes: 3, edgeWeight: 0 },
+      { mass: total, nodes: 3, edgeWeight: 0, hubScore: 0 },
     );
     expect(topped.bins[0]?.id).toBe(2);
     expect(topped.bins.map((b) => b.value)).toEqual([5, 120]);
@@ -40,7 +40,7 @@ describe("interpret rank_by_length", () => {
     const topped = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "top_k_1", params: { limit: 1 } }],
       bins,
-      { mass: 105, nodes: 2, edgeWeight: 0 },
+      { mass: 105, nodes: 2, edgeWeight: 0, hubScore: 0 },
     );
     expect(topped.bins[0]?.id).toBe(1);
   });
@@ -61,7 +61,7 @@ describe("interpret drill_length_patterns", () => {
         { name: "drill_length_patterns", params: { limit: 1, lengthKey: "1" } },
       ],
       bins,
-      { mass: 133, nodes: 4, edgeWeight: 0 },
+      { mass: 133, nodes: 4, edgeWeight: 0, hubScore: 0 },
     );
     // length 1 only: #3=20, #4=8 → top-1 keeps #3 + residual 8
     expect(drilled.total).toBe(28);
@@ -82,7 +82,7 @@ describe("interpret drill_length_patterns", () => {
       interpretSummary(
         [{ name: "load_pattern_mass" }, { name: "drill_length_patterns", params: { limit: 5 } }],
         bins,
-        { mass: 15, nodes: 2, edgeWeight: 0 },
+        { mass: 15, nodes: 2, edgeWeight: 0, hubScore: 0 },
       ),
     ).toThrow(/lengthKey/);
   });
@@ -100,7 +100,7 @@ describe("interpret partition_by_length", () => {
     const partitioned = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "partition_by_length", params: { limit: 1 } }],
       bins,
-      { mass: total, nodes: 4, edgeWeight: 0 },
+      { mass: total, nodes: 4, edgeWeight: 0, hubScore: 0 },
     );
     expect(partitioned.bins.some((b) => b.id === 2)).toBe(true);
     expect(partitioned.bins.some((b) => b.id === 1)).toBe(true);
@@ -110,7 +110,7 @@ describe("interpret partition_by_length", () => {
     const globalTop = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "top_k_1", params: { limit: 1 } }],
       bins,
-      { mass: total, nodes: 4, edgeWeight: 0 },
+      { mass: total, nodes: 4, edgeWeight: 0, hubScore: 0 },
     );
     expect(globalTop.bins.map((b) => b.id ?? b.key)).toEqual([1, "other"]);
     expect(globalTop.bins.some((b) => b.id === 2)).toBe(false);
@@ -126,7 +126,7 @@ describe("interpret partition_by_length", () => {
     const out = interpretSummary(
       [{ name: "load_pattern_mass" }, { name: "partition_by_length", params: { limit: 1 } }],
       bins,
-      { mass: 20, nodes: 4, edgeWeight: 0 },
+      { mass: 20, nodes: 4, edgeWeight: 0, hubScore: 0 },
     );
     // length 0: #1=10, residual 3; length 1: #3=5, residual 2
     expect(out.bins.filter((b) => b.key.endsWith(":other")).map((b) => b.value)).toEqual([3, 2]);

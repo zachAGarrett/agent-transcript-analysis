@@ -4,8 +4,15 @@ import type { PathStep, TipKind } from "./types";
 export type PathState = {
   tip: TipKind;
   grain: "none" | "run" | "pattern" | "length" | "pattern-by-length";
-  measure: "none" | "stored-count" | "vocabulary" | "edge-weight";
-  source: "none" | "pattern-mass" | "pattern-vocab" | "edge-weight" | "run-scalars";
+  measure: "none" | "stored-count" | "vocabulary" | "edge-weight" | "hub-score" | "in-edge-weight";
+  source:
+    | "none"
+    | "pattern-mass"
+    | "pattern-vocab"
+    | "edge-weight"
+    | "pattern-hub"
+    | "in-edge-weight"
+    | "run-scalars";
   faceted: boolean;
   normalized: boolean;
   hasTopK: boolean;
@@ -75,11 +82,19 @@ export const pathStateSchema: Schema<PathState> = {
     grain: { type: "string", enum: ["none", "run", "pattern", "length", "pattern-by-length"] },
     measure: {
       type: "string",
-      enum: ["none", "stored-count", "vocabulary", "edge-weight"],
+      enum: ["none", "stored-count", "vocabulary", "edge-weight", "hub-score", "in-edge-weight"],
     },
     source: {
       type: "string",
-      enum: ["none", "pattern-mass", "pattern-vocab", "edge-weight", "run-scalars"],
+      enum: [
+        "none",
+        "pattern-mass",
+        "pattern-vocab",
+        "edge-weight",
+        "pattern-hub",
+        "in-edge-weight",
+        "run-scalars",
+      ],
     },
     faceted: { type: "boolean" },
     normalized: { type: "boolean" },
