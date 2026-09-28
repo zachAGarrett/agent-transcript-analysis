@@ -36,20 +36,22 @@ export { patternDisplayLabel, setPatternLabeler } from "./labels";
 export {
   applySelectBin,
   clearSessionTip,
-  isUserFollowupChip,
-  morphismByName,
-  morphismContracts,
-  morphismCriteria,
   morphismDefs,
-  morphismLabel,
-  morphismReloads,
-  morphismWhat,
 } from "./morphisms/registry";
 export {
   applyPath,
   enabledNames,
+  isUserFollowupChip,
+  morphismByName,
+  morphismContracts,
+  morphismCriteria,
+  morphismLabel,
+  morphismReloads,
+  morphismWhat,
   pathExecutable,
+  pathMorphismSpace,
   pathSpace,
+  SESSION_MORPHISMS,
 } from "./morphisms/transitions";
 export type {
   MorphismContract,
@@ -67,11 +69,7 @@ export {
   stateIsOverview,
 } from "./path-session";
 export type { PathState, SelectionContext } from "./path-state";
-export {
-  initialPathState,
-  pathStateSchema,
-  SESSION_MORPHISMS,
-} from "./path-state";
+export { initialPathState, pathStateSchema } from "./path-state";
 export { patternLengthKey, patternsByLength } from "./pattern-length";
 export { explorerStarterPresets, presetPaths } from "./presets";
 

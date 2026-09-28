@@ -1,27 +1,14 @@
+import type {
+  MorphismContract,
+  MorphismCriteria,
+  MorphismDefinition,
+  MorphismPhase,
+} from "@workstream/morphism-space";
 import type { Bin, Summary } from "@workstream/viz-algebra";
 import type { PathState } from "../path-state";
 import type { PathStep } from "../types";
 
-export type MorphismPhase = "construction" | "display" | "session";
-
-export type MorphismCriteria = {
-  label: string;
-  what: string;
-  not_for: string;
-  examples: string[];
-};
-
-export type MorphismContract = {
-  domain: string;
-  codomain: string;
-  /** Chart data must be reloaded after this morphism. */
-  reload?: boolean;
-  /**
-   * When false, hide from the follow-up chip row (still legal in enabled /
-   * auto-follow). Defaults to true for transitions that appear in enabled.
-   */
-  userFollowup?: boolean;
-};
+export type { MorphismContract, MorphismCriteria, MorphismPhase };
 
 /** Mutable accumulator for plan → bins interpretation. */
 export type InterpretCtx = {
@@ -38,14 +25,11 @@ export type InterpretCtx = {
   totals: { mass: number; nodes: number; edgeWeight: number; hubScore: number };
 };
 
-export type MorphismDef = {
-  name: string;
-  phase: MorphismPhase;
-  criteria: MorphismCriteria;
-  contract: MorphismContract;
-  guard: (state: PathState, context?: unknown) => boolean;
-  guardMessage: string;
-  effect: (state: PathState, context?: unknown) => PathState;
-  /** Optional interpret handler; display/session morphisms often omit this. */
-  interpret?: (ctx: InterpretCtx, step: PathStep) => InterpretCtx;
-};
+/** Lattice morphism definition: PathState effects + optional InterpretCtx handlers. */
+export type MorphismDef<TName extends string = string> = MorphismDefinition<
+  PathState,
+  unknown,
+  InterpretCtx,
+  PathStep,
+  TName
+>;

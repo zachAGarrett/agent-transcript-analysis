@@ -1,3 +1,4 @@
+import { defineMorphisms } from "@workstream/morphism-space";
 import { rollup, type Summary, topWithRemainder } from "@workstream/viz-algebra";
 import { patternDisplayLabel } from "../labels";
 import type { PathState, SelectionContext } from "../path-state";
@@ -17,15 +18,29 @@ function totalForMeasure(measure: PathState["measure"], totals: InterpretCtx["to
   return totals.mass;
 }
 
-/** Append a construction/display step to the render plan. */
-function append(state: PathState, name: string, params?: Record<string, unknown>): PathState {
+/** Shallow merge into path state (no plan step). */
+export function patchState(state: PathState, patch: Partial<PathState>): PathState {
+  return { ...state, ...patch };
+}
+
+/** Append a construction/display step, optionally merging a shallow state patch. */
+export function appendStep(
+  state: PathState,
+  name: string,
+  patch: Partial<PathState> = {},
+  params?: Record<string, unknown>,
+): PathState {
   const step: PathStep = params ? { name, params } : { name };
-  return { ...state, steps: [...state.steps, step] };
+  return { ...state, ...patch, steps: [...state.steps, step] };
+}
+
+/** Tip/session-only patch (never appends a construction step). */
+export function tipPatch(state: PathState, patch: Partial<PathState>): PathState {
+  return patchState(state, patch);
 }
 
 export function clearSessionTip(state: PathState): PathState {
-  return {
-    ...state,
+  return tipPatch(state, {
     tip: state.tip === "selected" ? (state.faceted ? "faceted" : "committed") : state.tip,
     hasSelection: false,
     selectionRunId: "",
@@ -33,13 +48,12 @@ export function clearSessionTip(state: PathState): PathState {
     selectionPatternId: 0,
     selectionLengthKey: "",
     detailRequested: false,
-  };
+  });
 }
 
 /** Tip-only selection update (no plan lineage). */
 export function applySelectBin(state: PathState, sel: SelectionContext): PathState {
-  return {
-    ...state,
+  return tipPatch(state, {
     tip: "selected",
     hasSelection: true,
     selectionRunId: sel.runId,
@@ -47,7 +61,7 @@ export function applySelectBin(state: PathState, sel: SelectionContext): PathSta
     selectionPatternId: sel.patternId ?? 0,
     selectionLengthKey: sel.lengthKey ?? "",
     detailRequested: false,
-  };
+  });
 }
 
 function lengthKeyFromContext(context: unknown, fallback: string): string {
@@ -86,21 +100,23 @@ function rankBinsByLength(bins: InterpretCtx["summary"]["bins"]) {
     }));
 }
 
-function loadDef(
-  name: string,
+function loadDef<N extends string>(
+  name: N,
   criteria: MorphismDef["criteria"],
   contract: MorphismDef["contract"],
   patch: Pick<PathState, "grain" | "measure" | "source">,
   sql: string,
-): MorphismDef {
+): MorphismDef<N> {
   return {
     name,
     phase: "construction",
     criteria,
     contract,
-    guard: (s) => s.tip === "query" && s.source === "none",
-    guardMessage: "Need query tip.",
-    effect: (s) => append({ ...s, tip: "summary", ...patch }, name),
+    available: {
+      when: (s) => s.tip === "query" && s.source === "none",
+      otherwise: "Need query tip.",
+    },
+    effect: (s) => appendStep(s, name, { tip: "summary", ...patch }),
     interpret: (ctx) => ({
       ...ctx,
       source: patch.source,
@@ -111,7 +127,7 @@ function loadDef(
   };
 }
 
-const topK = (n: 5 | 10 | 20): MorphismDef => ({
+const topK = <N extends 5 | 10 | 20>(n: N): MorphismDef<`top_k_${N}`> => ({
   name: `top_k_${n}`,
   phase: "display",
   criteria: {
@@ -124,21 +140,23 @@ const topK = (n: 5 | 10 | 20): MorphismDef => ({
     domain: "summary|faceted · !run · !hasTopK",
     codomain: `displayed|faceted · hasTopK · limit ${n}`,
   },
-  guard: (s) =>
-    (s.tip === "summary" || (s.tip === "faceted" && !s.hasTopK)) &&
-    s.grain !== "run" &&
-    s.source !== "run-scalars" &&
-    !s.hasTopK,
-  guardMessage: "Top-k needs aggregate summary (not run-scalars).",
+  available: {
+    when: (s) =>
+      (s.tip === "summary" || (s.tip === "faceted" && !s.hasTopK)) &&
+      s.grain !== "run" &&
+      s.source !== "run-scalars" &&
+      !s.hasTopK,
+    otherwise: "Top-k needs aggregate summary (not run-scalars).",
+  },
   effect: (s) =>
-    append(
+    appendStep(
+      s,
+      `top_k_${n}`,
       {
-        ...s,
         tip: s.faceted ? "faceted" : "displayed",
         hasTopK: true,
         limit: n,
       },
-      `top_k_${n}`,
       { limit: n },
     ),
   interpret: (ctx, step) => {
@@ -165,7 +183,7 @@ const topK = (n: 5 | 10 | 20): MorphismDef => ({
   },
 });
 
-export const morphismDefs: MorphismDef[] = [
+export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, PathStep>()([
   loadDef(
     "load_pattern_mass",
     {
@@ -273,10 +291,16 @@ export const morphismDefs: MorphismDef[] = [
       domain: "summary · pattern · !hasTopK",
       codomain: "summary · length",
     },
-    guard: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
-    guardMessage: "Rollup needs pattern summary before top-k.",
+    available: {
+      when: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
+      otherwise: "Rollup needs pattern summary before top-k.",
+    },
     effect: (s) =>
-      append({ ...s, tip: "summary", grain: "length", rankedByLength: false }, "rollup_length"),
+      appendStep(s, "rollup_length", {
+        tip: "summary",
+        grain: "length",
+        rankedByLength: false,
+      }),
     interpret: (ctx) => ({
       ...ctx,
       summary: rollup(ctx.summary, "length", patternLengthKey),
@@ -298,15 +322,21 @@ export const morphismDefs: MorphismDef[] = [
       domain: "summary · pattern · !hasTopK · !rankedByLength",
       codomain: "summary · pattern · rankedByLength",
     },
-    guard: (s) =>
-      s.tip === "summary" &&
-      s.grain === "pattern" &&
-      !s.hasTopK &&
-      !s.rankedByLength &&
-      isPatternSource(s),
-    guardMessage: "Rank by length needs pattern summary before top-k.",
+    available: {
+      when: (s) =>
+        s.tip === "summary" &&
+        s.grain === "pattern" &&
+        !s.hasTopK &&
+        !s.rankedByLength &&
+        isPatternSource(s),
+      otherwise: "Rank by length needs pattern summary before top-k.",
+    },
     effect: (s) =>
-      append({ ...s, tip: "summary", grain: "pattern", rankedByLength: true }, "rank_by_length"),
+      appendStep(s, "rank_by_length", {
+        tip: "summary",
+        grain: "pattern",
+        rankedByLength: true,
+      }),
     interpret: (ctx) => ({
       ...ctx,
       summary: { ...ctx.summary, bins: rankBinsByLength(ctx.summary.bins) },
@@ -329,18 +359,20 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "displayed|faceted · pattern-by-length · hasTopK",
       reload: true,
     },
-    guard: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
-    guardMessage: "Partition by length needs pattern summary before top-k.",
+    available: {
+      when: (s) => s.tip === "summary" && s.grain === "pattern" && !s.hasTopK && isPatternSource(s),
+      otherwise: "Partition by length needs pattern summary before top-k.",
+    },
     effect: (s) =>
-      append(
+      appendStep(
+        s,
+        "partition_by_length",
         {
-          ...s,
           tip: s.faceted ? "faceted" : "displayed",
           grain: "pattern-by-length",
           hasTopK: true,
           rankedByLength: false,
         },
-        "partition_by_length",
         { limit: s.limit },
       ),
     interpret: (ctx, step) => {
@@ -382,21 +414,19 @@ export const morphismDefs: MorphismDef[] = [
       domain: "summary|displayed|faceted · !run · !normalized",
       codomain: "displayed|faceted · normalized",
     },
-    guard: (s) =>
-      (s.tip === "summary" || s.tip === "displayed" || s.tip === "faceted") &&
-      s.grain !== "run" &&
-      !s.normalized &&
-      s.source !== "run-scalars",
-    guardMessage: "Normalize after aggregation; once only.",
+    available: {
+      when: (s) =>
+        (s.tip === "summary" || s.tip === "displayed" || s.tip === "faceted") &&
+        s.grain !== "run" &&
+        !s.normalized &&
+        s.source !== "run-scalars",
+      otherwise: "Normalize after aggregation; once only.",
+    },
     effect: (s) =>
-      append(
-        {
-          ...s,
-          tip: s.faceted ? "faceted" : "displayed",
-          normalized: true,
-        },
-        "normalize",
-      ),
+      appendStep(s, "normalize", {
+        tip: s.faceted ? "faceted" : "displayed",
+        normalized: true,
+      }),
   },
   {
     name: "facet_runs",
@@ -411,10 +441,12 @@ export const morphismDefs: MorphismDef[] = [
       domain: "summary|displayed · !faceted · !run-scalars",
       codomain: "faceted",
     },
-    guard: (s) =>
-      (s.tip === "summary" || s.tip === "displayed") && !s.faceted && s.source !== "run-scalars",
-    guardMessage: "Facet once from summary/displayed.",
-    effect: (s) => append({ ...s, tip: "faceted", faceted: true }, "facet_runs"),
+    available: {
+      when: (s) =>
+        (s.tip === "summary" || s.tip === "displayed") && !s.faceted && s.source !== "run-scalars",
+      otherwise: "Facet once from summary/displayed.",
+    },
+    effect: (s) => appendStep(s, "facet_runs", { tip: "faceted", faceted: true }),
   },
   {
     name: "commit",
@@ -430,12 +462,14 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "committed",
       userFollowup: false,
     },
-    guard: (s) =>
-      s.tip === "displayed" ||
-      s.tip === "faceted" ||
-      (s.tip === "summary" && (s.grain === "run" || s.grain === "length")),
-    guardMessage: "Commit from renderable tip.",
-    effect: (s) => append({ ...s, tip: "committed" }, "commit"),
+    available: {
+      when: (s) =>
+        s.tip === "displayed" ||
+        s.tip === "faceted" ||
+        (s.tip === "summary" && (s.grain === "run" || s.grain === "length")),
+      otherwise: "Commit from renderable tip.",
+    },
+    effect: (s) => appendStep(s, "commit", { tip: "committed" }),
   },
   {
     name: "select_bin",
@@ -451,9 +485,14 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "selected · hasSelection",
       userFollowup: false,
     },
-    guard: (s) =>
-      s.tip === "committed" || s.tip === "displayed" || s.tip === "faceted" || s.tip === "selected",
-    guardMessage: "Select from a rendered view.",
+    available: {
+      when: (s) =>
+        s.tip === "committed" ||
+        s.tip === "displayed" ||
+        s.tip === "faceted" ||
+        s.tip === "selected",
+      otherwise: "Select from a rendered view.",
+    },
     effect: (s, context) => {
       const sel = context as SelectionContext | undefined;
       if (!sel?.runId || !sel.binKey) throw new Error("Selection context required.");
@@ -473,8 +512,10 @@ export const morphismDefs: MorphismDef[] = [
       domain: "selected|hasSelection",
       codomain: "committed|faceted · !hasSelection",
     },
-    guard: (s) => s.hasSelection || s.tip === "selected",
-    guardMessage: "No selection.",
+    available: {
+      when: (s) => s.hasSelection || s.tip === "selected",
+      otherwise: "No selection.",
+    },
     effect: (s) => clearSessionTip(s),
   },
   {
@@ -491,9 +532,11 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "same · detailRequested",
       userFollowup: false,
     },
-    guard: (s) => (s.tip === "selected" || s.hasSelection) && s.selectionPatternId > 0,
-    guardMessage: "Need a pattern selection.",
-    effect: (s) => ({ ...s, detailRequested: true }),
+    available: {
+      when: (s) => (s.tip === "selected" || s.hasSelection) && s.selectionPatternId > 0,
+      otherwise: "Need a pattern selection.",
+    },
+    effect: (s) => tipPatch(s, { detailRequested: true }),
   },
   {
     name: "close_pattern_detail",
@@ -509,9 +552,11 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "same · !detailRequested",
       userFollowup: false,
     },
-    guard: (s) => s.detailRequested,
-    guardMessage: "No pattern detail open.",
-    effect: (s) => ({ ...s, detailRequested: false }),
+    available: {
+      when: (s) => s.detailRequested,
+      otherwise: "No pattern detail open.",
+    },
+    effect: (s) => tipPatch(s, { detailRequested: false }),
   },
   {
     name: "focus_run",
@@ -527,16 +572,18 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "committed · !faceted · single run",
       reload: true,
     },
-    guard: (s) => s.faceted && s.hasSelection && s.selectionRunId.length > 0,
-    guardMessage: "Focus needs faceted view + run selection.",
+    available: {
+      when: (s) => s.faceted && s.hasSelection && s.selectionRunId.length > 0,
+      otherwise: "Focus needs faceted view + run selection.",
+    },
     effect: (s) =>
-      append(
+      appendStep(
+        s,
+        "focus_run",
         {
-          ...s,
           faceted: false,
           tip: "committed",
         },
-        "focus_run",
         { runId: s.selectionRunId },
       ),
   },
@@ -554,13 +601,15 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "committed · pattern-by-length · hasTopK",
       reload: true,
     },
-    guard: (s) =>
-      s.grain === "length" &&
-      (s.tip === "selected" || s.hasSelection) &&
-      s.selectionLengthKey.length > 0 &&
-      s.selectionLengthKey !== "other" &&
-      isPatternSource(s),
-    guardMessage: "Drill needs a length-bin selection on a pattern source.",
+    available: {
+      when: (s) =>
+        s.grain === "length" &&
+        (s.tip === "selected" || s.hasSelection) &&
+        s.selectionLengthKey.length > 0 &&
+        s.selectionLengthKey !== "other" &&
+        isPatternSource(s),
+      otherwise: "Drill needs a length-bin selection on a pattern source.",
+    },
     effect: (s, context) => {
       const lengthKey = lengthKeyFromContext(context, s.selectionLengthKey);
       if (!lengthKey || lengthKey === "other") throw new Error("Drill needs a length key.");
@@ -570,16 +619,16 @@ export const morphismDefs: MorphismDef[] = [
             ? (context as { limit?: unknown }).limit
             : s.limit,
         ) || s.limit;
-      return append(
+      return appendStep(
+        clearSessionTip(s),
+        "drill_length_patterns",
         {
-          ...clearSessionTip(s),
           tip: "committed",
           grain: "pattern-by-length",
           hasTopK: true,
           rankedByLength: false,
           limit,
         },
-        "drill_length_patterns",
         { limit, lengthKey },
       );
     },
@@ -639,24 +688,22 @@ export const morphismDefs: MorphismDef[] = [
       codomain: "committed · length · !hasTopK",
       reload: true,
     },
-    guard: (s) =>
-      (s.tip === "committed" || s.tip === "selected" || s.tip === "displayed") &&
-      s.grain === "pattern" &&
-      s.hasTopK &&
-      isPatternSource(s),
-    guardMessage: "Re-rollup from pattern top-k.",
+    available: {
+      when: (s) =>
+        (s.tip === "committed" || s.tip === "selected" || s.tip === "displayed") &&
+        s.grain === "pattern" &&
+        s.hasTopK &&
+        isPatternSource(s),
+      otherwise: "Re-rollup from pattern top-k.",
+    },
     effect: (s) =>
-      append(
-        {
-          ...clearSessionTip(s),
-          tip: "committed",
-          grain: "length",
-          hasTopK: false,
-          rankedByLength: false,
-          normalized: false,
-        },
-        "re_rollup",
-      ),
+      appendStep(clearSessionTip(s), "re_rollup", {
+        tip: "committed",
+        grain: "length",
+        hasTopK: false,
+        rankedByLength: false,
+        normalized: false,
+      }),
     interpret: (ctx) => {
       const binValue = (bin: (typeof ctx.patternBins)[number]) =>
         ctx.measure === "vocabulary" ? 1 : bin.value;
@@ -679,30 +726,4 @@ export const morphismDefs: MorphismDef[] = [
       };
     },
   },
-];
-
-export const morphismByName = new Map(morphismDefs.map((d) => [d.name, d]));
-
-export const morphismCriteria: Record<string, MorphismDef["criteria"]> = Object.fromEntries(
-  morphismDefs.map((d) => [d.name, d.criteria]),
-);
-
-export const morphismContracts: Record<string, MorphismDef["contract"]> = Object.fromEntries(
-  morphismDefs.map((d) => [d.name, d.contract]),
-);
-
-export function morphismLabel(name: string): string {
-  return morphismCriteria[name]?.label ?? name;
-}
-
-export function morphismWhat(name: string): string | undefined {
-  return morphismCriteria[name]?.what;
-}
-
-export function morphismReloads(name: string): boolean {
-  return morphismContracts[name]?.reload === true;
-}
-
-export function isUserFollowupChip(name: string): boolean {
-  return morphismContracts[name]?.userFollowup !== false;
-}
+]);

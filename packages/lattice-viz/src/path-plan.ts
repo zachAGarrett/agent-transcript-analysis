@@ -1,6 +1,6 @@
 import { clearSessionTip } from "./morphisms/registry";
-import { applyPath, enabledNames } from "./morphisms/transitions";
-import { initialPathState, type PathState, SESSION_MORPHISMS } from "./path-state";
+import { applyPath, enabledNames, SESSION_MORPHISMS } from "./morphisms/transitions";
+import { initialPathState, type PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
 
 /**

@@ -12,8 +12,10 @@ import {
   autoFollowupAfterSelect,
   enabledNames,
   initialPathState,
+  morphismByName,
   morphismContracts,
   morphismCriteria,
+  morphismDefs,
   parsePathPlan,
   pathSpace,
   revertPathTo,
@@ -451,6 +453,46 @@ describe("follow-up morphisms", () => {
 });
 
 describe("morphism contracts", () => {
+  test("every definition compiles to exactly one transition; projections share names", () => {
+    const defNames = morphismDefs.map((d) => d.name).sort();
+    const transitionNames = pathSpace.transitions.map((t) => t.name).sort();
+    expect(transitionNames).toEqual(defNames);
+    expect(Object.keys(morphismCriteria).sort()).toEqual(defNames);
+    expect(Object.keys(morphismContracts).sort()).toEqual(defNames);
+    expect([...morphismByName.keys()].sort()).toEqual(defNames);
+    expect(pathSpace.transitions).toHaveLength(morphismDefs.length);
+  });
+
+  test("enabledNames / applyPath parity across load, display, session, reload paths", () => {
+    expect(enabledNames(initialPathState)).toContain("load_pattern_mass");
+    const loaded = applyPath(initialPathState, "load_pattern_mass");
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    expect(enabledNames(loaded.state)).toContain("top_k_10");
+    const displayed = applyPath(loaded.state, "top_k_10");
+    expect(displayed.ok).toBe(true);
+    if (!displayed.ok) return;
+
+    const committed = applyPath(displayed.state, "commit");
+    expect(committed.ok).toBe(true);
+    if (!committed.ok) return;
+
+    expect(enabledNames(committed.state)).toContain("re_rollup");
+    const sel = { runId: "run-a", binKey: "1", patternId: 1 };
+    expect(enabledNames(committed.state, sel)).toContain("select_bin");
+    const selected = applyPath(committed.state, "select_bin", sel);
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) return;
+    expect(selected.state.tip).toBe("selected");
+
+    const rolled = applyPath(committed.state, "re_rollup");
+    expect(rolled.ok).toBe(true);
+    if (!rolled.ok) return;
+    expect(rolled.state.grain).toBe("length");
+    expect(rolled.state.hasTopK).toBe(false);
+  });
+
   test("every transition has a contract and criteria entry", () => {
     for (const transition of pathSpace.transitions) {
       expect(morphismContracts[transition.name]).toBeDefined();

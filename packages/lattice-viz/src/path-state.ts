@@ -126,11 +126,3 @@ export const pathStateSchema: Schema<PathState> = {
     detailRequested: { type: "boolean" },
   },
 };
-
-/** Session morphisms update tip only — never appear in the construction plan. */
-export const SESSION_MORPHISMS = new Set([
-  "select_bin",
-  "clear_selection",
-  "open_pattern_detail",
-  "close_pattern_detail",
-]);

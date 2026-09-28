@@ -1,73 +1,49 @@
-import {
-  ConstraintRepository,
-  type StateSpace,
-  StateSpaceRepository,
-  type Transition,
-} from "@statespace/core";
+import { StateSpaceRepository } from "@statespace/core";
+import { createMorphismSpace } from "@workstream/morphism-space";
 import type { PathState } from "../path-state";
 import { pathStateSchema } from "../path-state";
+import type { PathStep } from "../types";
 import { morphismDefs } from "./registry";
+import type { InterpretCtx, MorphismContract, MorphismCriteria } from "./types";
 
-function guard(
-  fn: (state: PathState) => boolean,
-  message: string,
-): Transition<PathState>["constraints"][number] {
-  return {
-    path: "tip",
-    phase: "before_transition",
-    validation: ConstraintRepository.createImperative<PathState, "tip">((_v, state) => ({
-      success: fn(state),
-      message,
-    })),
-  };
-}
-
-function patch(
-  name: string,
-  update: (state: PathState, context?: unknown) => PathState,
-  constraints: Transition<PathState>["constraints"],
-): Transition<PathState> {
-  return {
-    name,
-    constraints,
-    effect: {
-      path: "tip",
-      operation: "transform",
-      value: (_path, state, context) => {
-        try {
-          const next = update(state as PathState, context);
-          return { success: true, state: next };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : "transform failed",
-          };
-        }
-      },
-    },
-  };
-}
-
-const transitions: Transition<PathState>[] = morphismDefs.map((def) =>
-  patch(def.name, def.effect, [guard((s) => def.guard(s), def.guardMessage)]),
-);
-
-export const pathSpace: StateSpace<PathState> = {
+export const pathMorphismSpace = createMorphismSpace<
+  PathState,
+  InterpretCtx,
+  PathStep,
+  typeof morphismDefs
+>({
   shape: pathStateSchema,
-  transitions,
-};
+  effectPath: "tip",
+  definitions: morphismDefs,
+});
 
-let executable: ReturnType<typeof StateSpaceRepository.makeExecutable<PathState>> | undefined;
+export const pathSpace = pathMorphismSpace.stateSpace;
 
-export function pathExecutable() {
-  if (!executable) executable = StateSpaceRepository.makeExecutable(pathSpace);
-  return executable;
+export const morphismByName = pathMorphismSpace.byName;
+export const morphismCriteria: Record<string, MorphismCriteria> = pathMorphismSpace.criteria;
+export const morphismContracts: Record<string, MorphismContract> = pathMorphismSpace.contracts;
+
+/** Session morphisms update tip only — never appear in the construction plan. */
+export const SESSION_MORPHISMS: Set<string> = pathMorphismSpace.sessionNames;
+
+export function morphismLabel(name: string): string {
+  return pathMorphismSpace.label(name as (typeof morphismDefs)[number]["name"]);
+}
+
+export function morphismWhat(name: string): string | undefined {
+  return pathMorphismSpace.what(name as (typeof morphismDefs)[number]["name"]);
+}
+
+export function morphismReloads(name: string): boolean {
+  return pathMorphismSpace.reloads(name as (typeof morphismDefs)[number]["name"]);
+}
+
+export function isUserFollowupChip(name: string): boolean {
+  return pathMorphismSpace.isUserFollowup(name as (typeof morphismDefs)[number]["name"]);
 }
 
 export function enabledNames(state: PathState, context?: unknown): string[] {
-  return pathExecutable()
-    .enabled(state, context)
-    .map((t) => t.name);
+  return pathMorphismSpace.enabledNames(state, context);
 }
 
 export function applyPath(
@@ -75,7 +51,12 @@ export function applyPath(
   name: string,
   context?: unknown,
 ): { ok: true; state: PathState } | { ok: false; error: string; state: PathState } {
-  const result = pathExecutable().apply(state, name, context);
-  if (result.success) return { ok: true, state: result.state };
-  return { ok: false, error: result.error ?? "apply failed", state: result.state };
+  return pathMorphismSpace.apply(state, name, context);
+}
+
+let executable: ReturnType<typeof StateSpaceRepository.makeExecutable<PathState>> | undefined;
+
+export function pathExecutable() {
+  if (!executable) executable = StateSpaceRepository.makeExecutable(pathSpace);
+  return executable;
 }

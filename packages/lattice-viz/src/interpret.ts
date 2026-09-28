@@ -1,6 +1,6 @@
 import type { Bin } from "@workstream/viz-algebra";
 import { topWithRemainder } from "@workstream/viz-algebra";
-import { morphismByName } from "./morphisms/registry";
+import { pathMorphismSpace } from "./morphisms/transitions";
 import type { InterpretCtx } from "./morphisms/types";
 import type { PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
@@ -16,8 +16,8 @@ function totalForMeasure(measure: PathState["measure"], totals: Totals): number 
 
 /** Fallback for ad-hoc top_k_N steps (tests) not registered as discrete morphisms. */
 function applyTopK(ctx: InterpretCtx, step: PathStep): InterpretCtx {
-  const registered = morphismByName.get(step.name);
-  if (registered?.interpret) return registered.interpret(ctx, step);
+  const registered = pathMorphismSpace.interpretOf(step.name);
+  if (registered) return registered(ctx, step);
   const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
   const total = totalForMeasure(ctx.measure, ctx.totals);
   if (ctx.summary.grain === "pattern-by-length") {
@@ -85,10 +85,9 @@ export function interpretSummary(
 
   // First pass: load morphisms set source/measure before building bins.
   for (const step of steps) {
-    const def = morphismByName.get(step.name);
-    if (def?.name.startsWith("load_") && def.interpret) {
-      ctx = def.interpret(ctx, step);
-    }
+    if (!step.name.startsWith("load_")) continue;
+    const interpret = pathMorphismSpace.interpretOf(step.name);
+    if (interpret) ctx = interpret(ctx, step);
   }
 
   if (ctx.source === "run-scalars") {
@@ -113,8 +112,8 @@ export function interpretSummary(
       ctx = applyTopK(ctx, step);
       continue;
     }
-    const def = morphismByName.get(step.name);
-    if (def?.interpret) ctx = def.interpret(ctx, step);
+    const interpret = pathMorphismSpace.interpretOf(step.name);
+    if (interpret) ctx = interpret(ctx, step);
   }
 
   return {

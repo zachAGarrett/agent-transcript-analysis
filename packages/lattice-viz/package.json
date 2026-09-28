@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@statespace/core": "workspace:*",
+    "@workstream/morphism-space": "workspace:*",
     "@workstream/viz-algebra": "workspace:*"
   }
 }
