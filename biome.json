@@ -15,7 +15,8 @@
       "!**/.idea",
       "!**/.vscode",
       "!**/.husky",
-      "!**/vendor"
+      "!**/vendor",
+      "!**/components/ui"
     ]
   },
   "formatter": {
@@ -36,6 +37,11 @@
     "enabled": true,
     "rules": {
       "preset": "recommended"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
     }
   },
   "javascript": {

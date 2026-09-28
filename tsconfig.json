@@ -12,7 +12,8 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/components/*": ["./app/components/*"]
     },
     "strict": true,
     "skipLibCheck": true,
