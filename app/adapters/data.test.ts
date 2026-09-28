@@ -21,8 +21,8 @@ function fixture() {
     "CREATE TABLE nodes(id INTEGER PRIMARY KEY, token TEXT, token_count INTEGER, hub_score REAL DEFAULT 0)",
   );
   db.run("CREATE TABLE edges(from_id INTEGER,to_id INTEGER,weight REAL)");
-  const insert = db.query("INSERT INTO nodes(id,token,token_count) VALUES (?,?,?)");
-  for (let id = 1; id <= 9; id++) insert.run(id, "a|".repeat(id), id);
+  const insert = db.query("INSERT INTO nodes(id,token,token_count,hub_score) VALUES (?,?,?,?)");
+  for (let id = 1; id <= 9; id++) insert.run(id, "a|".repeat(id), id, id === 9 ? Math.log1p(5) : 0);
   db.run("INSERT INTO edges VALUES(9,1,3),(9,2,2),(1,9,1)");
   return { root, db, store: new RunStore(root), path };
 }
@@ -49,6 +49,23 @@ test("bounded top-k conserves full count mass; no node or score writes", async (
     });
     expect(graph.facets[0]?.bins[0]?.value).toBe(5);
     expect(graph.facets[0]?.total).toBe(6);
+    const hubs = await store.view({
+      steps: [{ name: "load_hub" }, { name: "top_k_10" }, { name: "commit" }],
+      runs: ["run-a"],
+    });
+    expect(hubs.facets[0]?.bins[0]?.id).toBe(9);
+    expect(hubs.facets[0]?.unit).toBe("hub score");
+    const inflows = await store.view({
+      steps: [{ name: "load_in_degree" }, { name: "top_k_10" }, { name: "commit" }],
+      runs: ["run-a"],
+    });
+    expect(inflows.facets[0]?.bins.find((b) => b.id === 1)?.value).toBe(3);
+    expect(inflows.facets[0]?.total).toBe(6);
+    const byEdgeLen = await store.view({
+      steps: [{ name: "load_edge_weight" }, { name: "rollup_length" }, { name: "commit" }],
+      runs: ["run-a"],
+    });
+    expect(byEdgeLen.facets[0]?.bins.reduce((sum, bin) => sum + bin.value, 0)).toBe(6);
     expect(db.query("SELECT * FROM nodes").all()).toEqual(before);
   } finally {
     db.close();

@@ -1,6 +1,7 @@
 import {
   autoFollowupAfterSelect,
   enabledNames,
+  explorerStarterPresets,
   facetChartModels,
   isUserFollowupChip,
   morphismLabel,
@@ -41,6 +42,7 @@ import {
   sessionAfterFollowup,
   sessionAfterRevert,
   sessionFromDecision,
+  sessionFromPreset,
 } from "@/app/session/explorer";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -728,10 +730,33 @@ export function Explorer() {
                   </EmptyTitle>
                   <EmptyDescription>
                     {runs.length
-                      ? "Type a question above to build a path through the lattice."
+                      ? "Type a question above, or start from a measure."
                       : "Produce an experiment run, then refresh."}
                   </EmptyDescription>
                 </EmptyHeader>
+                {runs.length ? (
+                  <div className="mt-2 flex max-w-lg flex-wrap justify-center gap-2">
+                    {explorerStarterPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSession(
+                            sessionFromPreset(
+                              preset.id,
+                              runs.map((r) => r.id),
+                            ),
+                          );
+                          setViewTick((n) => n + 1);
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
               </Empty>
             )}
           </section>

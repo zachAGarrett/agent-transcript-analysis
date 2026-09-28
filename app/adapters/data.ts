@@ -17,9 +17,27 @@ import { decodePatternSteps, patternDisplayLabel } from "./decode";
 export type { Facet, PatternDetail, PatternLinks, Run, View };
 
 const summarySql = `SELECT count(*) nodes, coalesce(sum(token_count),0) mass,
-  coalesce(sum(hub_score != 0),0) scored FROM nodes`;
+  coalesce(sum(hub_score),0) hubScore, coalesce(sum(hub_score != 0),0) scored FROM nodes`;
 const edgesSql = `SELECT count(*) edges, coalesce(sum(weight),0) edgeWeight,
   coalesce(max(weight),0) maxWeight FROM edges`;
+
+const loadSql: Record<string, string> = {
+  load_pattern_mass: "SELECT id, token, token_count value FROM nodes",
+  load_pattern_vocab: "SELECT id, token, token_count value FROM nodes",
+  load_hub: "SELECT id, token, hub_score value FROM nodes",
+  load_edge_weight: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
+LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e
+ON e.from_id = n.id`,
+  load_in_degree: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
+LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e
+ON e.to_id = n.id`,
+};
+
+function loadStepSql(plan: PathPlan): string {
+  const load = plan.steps.find((s) => s.name.startsWith("load_"));
+  const sql = loadSql[load?.name ?? ""];
+  return sql ?? "SELECT id, token, token_count value FROM nodes";
+}
 
 export class RunStore {
   readonly root: string;
@@ -92,9 +110,12 @@ export class RunStore {
     return this.read(id, (db) => ({
       id,
       version: this.version(id),
-      ...(db.query<{ nodes: number; mass: number; scored: number }, []>(summarySql).get() as {
+      ...(db
+        .query<{ nodes: number; mass: number; hubScore: number; scored: number }, []>(summarySql)
+        .get() as {
         nodes: number;
         mass: number;
+        hubScore: number;
         scored: number;
       }),
       ...(db
@@ -129,7 +150,7 @@ export class RunStore {
       if (cached) return { ...cached, cacheHit: true };
       const facets: Facet[] = [];
       const isOverview = planIsOverview(plan);
-      const isEdge = plan.steps.some((s) => s.name === "load_edge_weight");
+      const sql = loadStepSql(plan);
       for (const id of plan.runs) {
         const run = await this.run(id);
         facets.push(
@@ -143,19 +164,7 @@ export class RunStore {
                 sql: `${summarySql};\n${edgesSql};`,
               };
             }
-            const rows = isEdge
-              ? db
-                  .query<{ id: number; token: string; value: number }, []>(
-                    `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
-LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e
-ON e.from_id = n.id`,
-                  )
-                  .all()
-              : db
-                  .query<{ id: number; token: string; value: number }, []>(
-                    "SELECT id, token, token_count value FROM nodes",
-                  )
-                  .all();
+            const rows = db.query<{ id: number; token: string; value: number }, []>(sql).all();
             const patternBins: Bin[] = rows.map(
               (row: { id: number; token: string; value: number }) => ({
                 key: String(row.id),
@@ -173,6 +182,7 @@ ON e.from_id = n.id`,
               mass: run.mass,
               nodes: run.nodes,
               edgeWeight: run.edgeWeight,
+              hubScore: run.hubScore,
             });
             return {
               run,

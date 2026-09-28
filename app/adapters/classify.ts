@@ -42,9 +42,72 @@ function forcedPick(legal: string[]): string | null {
   return null;
 }
 
-/** Rules policy: walk enabled only when the next step is forced (no keywords). */
+function has(legal: string[], name: string): boolean {
+  return legal.includes(name);
+}
+
+/** Keyword heuristic among competing legal morphisms (loads + common construction). */
+export function rulesPick(question: string, legal: string[]): string | null {
+  const forced = forcedPick(legal);
+  if (forced) return forced;
+
+  const q = question.toLowerCase();
+  const loads = legal.filter((n) => n.startsWith("load_"));
+  if (loads.length > 1) {
+    if (
+      has(legal, "load_hub") &&
+      /\b(hub|central|centrality|well[- ]?connected|pagerank)\b/.test(q)
+    ) {
+      return "load_hub";
+    }
+    if (
+      has(legal, "load_in_degree") &&
+      /\b(incoming|in[- ]?degree|sink|attractor|converge)\b/.test(q)
+    ) {
+      return "load_in_degree";
+    }
+    if (
+      has(legal, "load_edge_weight") &&
+      /\b(outgoing|out[- ]?degree|connect|connectivity|branch|junction)\b/.test(q)
+    ) {
+      return "load_edge_weight";
+    }
+    if (has(legal, "load_pattern_vocab") && /\b(vocab|vocabulary|distinct|unique)\b/.test(q)) {
+      return "load_pattern_vocab";
+    }
+    if (has(legal, "load_run_scalars") && /\b(overview|compare runs|run scalars?)\b/.test(q)) {
+      return "load_run_scalars";
+    }
+    // Default pattern load when the question looks chart-like or mentions patterns/length.
+    if (
+      has(legal, "load_pattern_mass") &&
+      /\b(lengths?|longest|mass|frequent|dominant|top|patterns?|show|chart|view)\b/.test(q)
+    ) {
+      return "load_pattern_mass";
+    }
+  }
+
+  if (has(legal, "rank_by_length") && /\blongest\b/.test(q)) return "rank_by_length";
+  if (has(legal, "partition_by_length") && /\b(per length|top per|patterns by length)\b/.test(q)) {
+    return "partition_by_length";
+  }
+  if (has(legal, "rollup_length") && /\b(lengths?|how long|complexity|distribution)\b/.test(q)) {
+    return "rollup_length";
+  }
+
+  if (
+    has(legal, "top_k_10") &&
+    /\b(top|dominant|frequent|mass|hub|incoming|outgoing|vocab|connect|patterns?|longest)\b/.test(q)
+  ) {
+    return "top_k_10";
+  }
+
+  return null;
+}
+
+/** Rules policy: forced picks plus keyword heuristics for competing loads/steps. */
 export async function proposePathRules(
-  _question: string,
+  question: string,
   catalogRuns: string[],
   hooks?: DecideHooks,
 ): Promise<DecideResponse> {
@@ -54,7 +117,7 @@ export async function proposePathRules(
     if (state.tip === "committed") break;
     const legal = enabledNames(state);
     if (legal.length === 0) break;
-    const pick = forcedPick(legal);
+    const pick = rulesPick(question, legal);
     if (!pick) break;
     const next = applyPath(state, pick);
     if (!next.ok) break;
