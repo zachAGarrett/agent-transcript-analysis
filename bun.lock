@@ -39,7 +39,15 @@
       "version": "0.0.0",
       "dependencies": {
         "@statespace/core": "workspace:*",
+        "@workstream/morphism-space": "workspace:*",
         "@workstream/viz-algebra": "workspace:*",
+      },
+    },
+    "packages/morphism-space": {
+      "name": "@workstream/morphism-space",
+      "version": "0.0.0",
+      "dependencies": {
+        "@statespace/core": "workspace:*",
       },
     },
     "packages/viz-algebra": {
@@ -304,6 +312,8 @@
     "@workflow/serde": ["@workflow/serde@4.1.0", "", {}, "sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ=="],
 
     "@workstream/lattice-viz": ["@workstream/lattice-viz@workspace:packages/lattice-viz"],
+
+    "@workstream/morphism-space": ["@workstream/morphism-space@workspace:packages/morphism-space"],
 
     "@workstream/viz-algebra": ["@workstream/viz-algebra@workspace:packages/viz-algebra"],
 
