@@ -1,23 +1,83 @@
+import type { CompositionCertificate } from "@workstream/morphism-space";
+import { classifyPathState } from "./morphisms/objects";
 import { clearSessionTip } from "./morphisms/registry";
 import { applyPath, enabledNames, SESSION_MORPHISMS } from "./morphisms/transitions";
 import { initialPathState, type PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
 
+export type CertifiedPathResult = {
+  state: PathState;
+  certificate: CompositionCertificate;
+};
+
 /**
- * Construction replay: drill stores lengthKey on the step (session select is not in
- * the plan), so hydrate a transient selection tip for legality + effect.
+ * Replay construction/display steps from initial, certifying each hop via
+ * semantic region classification. Session morphisms are rejected.
+ * Drill carries lengthKey in step params — no manufactured selection tip.
  */
-function tipForConstructionStep(state: PathState, step: PathStep): PathState {
-  if (step.name !== "drill_length_patterns") return state;
-  const lengthKey = String(step.params?.lengthKey ?? "");
-  if (!lengthKey || lengthKey === "other") return state;
+export function composeCertifiedPath(steps: PathStep[]): CertifiedPathResult {
+  let state = initialPathState;
+  const regions: string[] = [];
+  const start = classifyPathState(state)?.key;
+  if (start) regions.push(start);
+  const stepNames: string[] = [];
+
+  for (const step of steps) {
+    if (SESSION_MORPHISMS.has(step.name)) {
+      return {
+        state,
+        certificate: {
+          ok: false,
+          source: regions[0],
+          intermediates: regions.slice(1),
+          steps: stepNames,
+          error: `Session morphism not allowed in plan: ${step.name}`,
+        },
+      };
+    }
+    const legal = new Set(enabledNames(state, step.params));
+    if (!legal.has(step.name)) {
+      return {
+        state,
+        certificate: {
+          ok: false,
+          source: regions[0],
+          target: regions[regions.length - 1],
+          intermediates: regions.slice(1, -1),
+          steps: stepNames,
+          error: `Illegal step: ${step.name}`,
+        },
+      };
+    }
+    const next = applyPath(state, step.name, step.params);
+    if (!next.ok) {
+      return {
+        state,
+        certificate: {
+          ok: false,
+          source: regions[0],
+          target: regions[regions.length - 1],
+          intermediates: regions.slice(1, -1),
+          steps: stepNames,
+          error: next.error,
+        },
+      };
+    }
+    stepNames.push(step.name);
+    state = next.state;
+    const after = classifyPathState(state)?.key;
+    if (after) regions.push(after);
+  }
+
   return {
-    ...state,
-    tip: "selected",
-    hasSelection: true,
-    selectionLengthKey: lengthKey,
-    selectionBinKey: lengthKey,
-    selectionRunId: state.selectionRunId || "_",
+    state,
+    certificate: {
+      ok: true,
+      source: regions[0],
+      target: regions[regions.length - 1],
+      intermediates: regions.slice(1, -1),
+      steps: stepNames,
+    },
   };
 }
 
@@ -37,30 +97,21 @@ export function revertPathTo(
   throughIndex: number,
   catalogRuns: string[],
   runs?: string[],
-): { plan: PathPlan; state: PathState } {
+): { plan: PathPlan; state: PathState; certificate: CompositionCertificate } {
   if (throughIndex < 0 || steps.length === 0) {
     throw new Error("Nothing to revert to.");
   }
   const truncated = steps.slice(0, throughIndex + 1);
-  let state = initialPathState;
-  for (const step of truncated) {
-    if (SESSION_MORPHISMS.has(step.name)) {
-      throw new Error(`Session morphism not allowed in plan: ${step.name}`);
-    }
-    const tip = tipForConstructionStep(state, step);
-    const legal = new Set(enabledNames(tip, step.params));
-    if (!legal.has(step.name)) throw new Error(`Illegal step: ${step.name}`);
-    const next = applyPath(tip, step.name, step.params);
-    if (!next.ok) throw new Error(next.error);
-    state = next.state;
-  }
+  let { state, certificate } = composeCertifiedPath(truncated);
+  if (!certificate.ok) throw new Error(certificate.error ?? "Illegal path.");
   if (state.tip !== "committed") {
     if (!enabledNames(state).includes("commit")) {
       throw new Error("Path tip is not viewable after truncate.");
     }
-    const committed = applyPath(state, "commit");
-    if (!committed.ok) throw new Error(committed.error);
+    const committed = composeCertifiedPath([...truncated, { name: "commit" }]);
+    if (!committed.certificate.ok) throw new Error(committed.certificate.error ?? "commit failed");
     state = committed.state;
+    certificate = committed.certificate;
   }
   state = clearSessionTip(state);
   let outRuns: string[];
@@ -72,31 +123,21 @@ export function revertPathTo(
     outRuns = catalogRuns.slice(0, 1);
   }
   if (outRuns.length < 1) throw new Error("No runs available.");
-  return { plan: { steps: state.steps, runs: outRuns }, state };
+  return { plan: { steps: state.steps, runs: outRuns }, state, certificate };
 }
 
 /** Replay construction steps from initial; reject session morphisms in the plan. */
 export function parsePathPlan(
   value: unknown,
   catalogRuns: string[],
-): { plan: PathPlan; state: PathState } {
+): { plan: PathPlan; state: PathState; certificate: CompositionCertificate } {
   if (!value || typeof value !== "object") throw new Error("Expected a path plan.");
   const raw = value as Record<string, unknown>;
   if (!Array.isArray(raw.steps)) throw new Error("Expected steps array.");
   const steps = raw.steps as PathStep[];
   if (steps.some((s) => !s || typeof s.name !== "string")) throw new Error("Invalid step.");
-  let state = initialPathState;
-  for (const step of steps) {
-    if (SESSION_MORPHISMS.has(step.name)) {
-      throw new Error(`Session morphism not allowed in plan: ${step.name}`);
-    }
-    const tip = tipForConstructionStep(state, step);
-    const legal = new Set(enabledNames(tip, step.params));
-    if (!legal.has(step.name)) throw new Error(`Illegal step: ${step.name}`);
-    const next = applyPath(tip, step.name, step.params);
-    if (!next.ok) throw new Error(next.error);
-    state = next.state;
-  }
+  const { state, certificate } = composeCertifiedPath(steps);
+  if (!certificate.ok) throw new Error(certificate.error ?? "Illegal path.");
   if (state.tip !== "committed") {
     throw new Error("Path must end committed.");
   }
@@ -112,5 +153,5 @@ export function parsePathPlan(
   if (runs.some((id) => typeof id !== "string" || !/^[\w-]+$/.test(id)))
     throw new Error("Invalid run ID.");
   if (new Set(runs).size !== runs.length) throw new Error("Duplicate run IDs.");
-  return { plan: { steps: state.steps, runs }, state };
+  return { plan: { steps: state.steps, runs }, state, certificate };
 }

@@ -5,6 +5,7 @@ import {
   StateSpaceRepository,
   type Transition,
 } from "@statespace/core";
+import { type CertifiedArrow, checkAndApply, type SemanticObjectDef } from "./category";
 import type {
   ApplyResult,
   MorphismDefinition,
@@ -24,13 +25,56 @@ type AnyDef<TState extends object, TInterpretCtx = unknown, TStep = unknown> = M
 >;
 
 /**
+ * Single apply path: optional categorical membership/target closure, then
+ * contextual availability, then effect. Used by both statespace transitions
+ * and CertifiedArrow projections so legality is not duplicated.
+ */
+function runDefApply<TState extends object, TInterpretCtx, TStep>(
+  def: AnyDef<TState, TInterpretCtx, TStep>,
+  state: TState,
+  context: unknown,
+  objects: readonly SemanticObjectDef<TState>[] | undefined,
+): ApplyResult<TState> {
+  const sourceKey = def.contract.source;
+  const targetKey = def.contract.target;
+  if (objects && sourceKey && targetKey) {
+    const certified = checkAndApply({
+      state,
+      context,
+      sourceKey,
+      targetKey,
+      objects,
+      effect: def.effect,
+      when: def.available.when,
+      otherwise: def.available.otherwise,
+    });
+    return certified.ok
+      ? { ok: true, state: certified.state }
+      : { ok: false, error: certified.error, state: certified.state };
+  }
+  if (!def.available.when(state, context)) {
+    return { ok: false, error: def.available.otherwise, state };
+  }
+  try {
+    return { ok: true, state: def.effect(state, context) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "transform failed",
+      state,
+    };
+  }
+}
+
+/**
  * Compile availability + effect into a statespace transform.
- * Availability runs in the effect (not a before_transition constraint) so apply
- * context reaches `available.when` and `otherwise` surfaces as the apply error.
+ * Availability (and optional region certification) runs in the effect so apply
+ * context reaches `available.when` and failures surface as apply errors.
  */
 function toTransition<TState extends object, TInterpretCtx, TStep>(
   def: AnyDef<TState, TInterpretCtx, TStep>,
   effectPath: Path<TState>,
+  objects: readonly SemanticObjectDef<TState>[] | undefined,
 ): Transition<TState> {
   return {
     name: def.name,
@@ -39,19 +83,9 @@ function toTransition<TState extends object, TInterpretCtx, TStep>(
       path: effectPath,
       operation: "transform",
       value: (_path, state, context) => {
-        const typedState = state as TState;
-        if (!def.available.when(typedState, context)) {
-          return { success: false, error: def.available.otherwise };
-        }
-        try {
-          const next = def.effect(typedState, context);
-          return { success: true, state: next };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : "transform failed",
-          };
-        }
+        const result = runDefApply(def, state as TState, context, objects);
+        if (!result.ok) return { success: false, error: result.error };
+        return { success: true, state: result.state };
       },
     },
   } as Transition<TState>;
@@ -74,14 +108,22 @@ export function createMorphismSpace<
   shape: Schema<TState>;
   effectPath: Path<TState>;
   definitions: TDefs;
+  objects?: readonly SemanticObjectDef<TState>[];
 }): MorphismSpace<TState, unknown, TInterpretCtx, TStep, TDefs> {
-  const { shape, effectPath, definitions } = options;
+  const { shape, effectPath, definitions, objects } = options;
   const seen = new Set<string>();
   for (const def of definitions) {
     if (seen.has(def.name)) {
       throw new Error(`Duplicate morphism name: ${def.name}`);
     }
     seen.add(def.name);
+  }
+
+  if (objects) {
+    const objectKeys = new Set(objects.map((o) => o.key));
+    if (objectKeys.size !== objects.length) {
+      throw new Error("Duplicate semantic object key.");
+    }
   }
 
   const byName = new Map(definitions.map((def) => [def.name, def])) as Map<
@@ -98,7 +140,7 @@ export function createMorphismSpace<
     definitions.map((def) => [def.name, def.contract]),
   ) as Record<TDefs[number]["name"], TDefs[number]["contract"]>;
 
-  const transitions = definitions.map((def) => toTransition(def, effectPath));
+  const transitions = definitions.map((def) => toTransition(def, effectPath, objects));
 
   const stateSpace: StateSpace<TState> = {
     shape: shape as Schema<TState>,
@@ -115,12 +157,34 @@ export function createMorphismSpace<
     definitions.filter((d) => d.phase === "session").map((d) => d.name),
   ) as Set<TDefs[number]["name"]>;
 
+  const apply = (state: TState, name: string, context?: unknown): ApplyResult<TState> => {
+    const result = getExecutable().apply(state, name, context);
+    if (result.success) return { ok: true, state: result.state };
+    return { ok: false, error: result.error ?? "apply failed", state: result.state };
+  };
+
+  const arrowOf = (name: string): CertifiedArrow<TState> | undefined => {
+    const def = byName.get(name as TDefs[number]["name"]);
+    if (!def) return undefined;
+    const source = def.contract.source;
+    const target = def.contract.target;
+    if (!source || !target) return undefined;
+    return {
+      name: def.name,
+      source,
+      target,
+      apply: (state, context) => apply(state, def.name, context),
+    };
+  };
+
   return {
     definitions,
     byName,
     stateSpace,
     criteria,
     contracts,
+    objects,
+    arrowOf,
     namesByPhase: (phase: MorphismPhase) =>
       definitions.filter((d) => d.phase === phase).map((d) => d.name) as TDefs[number]["name"][],
     sessionNames,
@@ -132,11 +196,7 @@ export function createMorphismSpace<
       getExecutable()
         .enabled(state, context)
         .map((t) => t.name as TDefs[number]["name"]),
-    apply: (state, name, context): ApplyResult<TState> => {
-      const result = getExecutable().apply(state, name, context);
-      if (result.success) return { ok: true, state: result.state };
-      return { ok: false, error: result.error ?? "apply failed", state: result.state };
-    },
+    apply,
     interpretOf: (name) =>
       byName.get(name as TDefs[number]["name"])?.interpret as
         | MorphismInterpret<TInterpretCtx, TStep>

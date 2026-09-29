@@ -11,8 +11,15 @@ import type {
   Run,
   View,
 } from "@workstream/lattice-viz";
-import { interpretSummary, planIsOverview } from "@workstream/lattice-viz";
+import {
+  canLowerToSql,
+  compilePath,
+  interpretSummary,
+  optimizeIR,
+  planIsOverview,
+} from "@workstream/lattice-viz";
 import { decodePatternSteps, patternDisplayLabel } from "./decode";
+import { lowerToSqlite, rowsToBins } from "./sqlite-plan";
 
 export type { Facet, PatternDetail, PatternLinks, Run, View };
 
@@ -37,6 +44,21 @@ function loadStepSql(plan: PathPlan): string {
   const load = plan.steps.find((s) => s.name.startsWith("load_"));
   const sql = loadSql[load?.name ?? ""];
   return sql ?? "SELECT id, token, token_count value FROM nodes";
+}
+
+function totalForMeasure(measure: string, run: Run): number {
+  if (measure === "vocabulary") return run.nodes;
+  if (measure === "hub-score") return run.hubScore;
+  if (measure === "edge-weight" || measure === "in-edge-weight") return run.edgeWeight;
+  return run.mass;
+}
+
+function unitForMeasure(measure: string): string {
+  if (measure === "vocabulary") return "patterns";
+  if (measure === "hub-score") return "hub score";
+  if (measure === "edge-weight") return "outgoing edge weight";
+  if (measure === "in-edge-weight") return "incoming edge weight";
+  return "stored counts";
 }
 
 export class RunStore {
@@ -150,7 +172,10 @@ export class RunStore {
       if (cached) return { ...cached, cacheHit: true };
       const facets: Facet[] = [];
       const isOverview = planIsOverview(plan);
-      const sql = loadStepSql(plan);
+      const { ir } = compilePath(plan.steps);
+      const optimized = optimizeIR(ir);
+      const sqlitePlan = !isOverview && canLowerToSql(optimized) ? lowerToSqlite(optimized) : null;
+      const fallbackSql = loadStepSql(plan);
       for (const id of plan.runs) {
         const run = await this.run(id);
         facets.push(
@@ -164,26 +189,56 @@ export class RunStore {
                 sql: `${summarySql};\n${edgesSql};`,
               };
             }
-            const rows = db.query<{ id: number; token: string; value: number }, []>(sql).all();
-            const patternBins: Bin[] = rows.map(
-              (row: { id: number; token: string; value: number }) => ({
-                key: String(row.id),
-                label: patternDisplayLabel({
-                  id: row.id,
-                  key: String(row.id),
-                  token: row.token,
-                }),
-                value: row.value,
-                id: row.id,
-                token: row.token,
-              }),
-            );
-            const interpreted = interpretSummary(plan.steps, patternBins, {
+            const totals = {
               mass: run.mass,
               nodes: run.nodes,
               edgeWeight: run.edgeWeight,
               hubScore: run.hubScore,
-            });
+            };
+
+            if (sqlitePlan) {
+              const rows = db
+                .query<
+                  { id: number; token: string; value: number; len_key?: number },
+                  (string | number)[]
+                >(sqlitePlan.sql)
+                .all(...sqlitePlan.params);
+              let bins = rowsToBins(rows, sqlitePlan.kind, patternDisplayLabel);
+              const total = totalForMeasure(sqlitePlan.measure, run);
+              if (
+                sqlitePlan.limit != null &&
+                (sqlitePlan.kind === "patterns" || sqlitePlan.kind === "lengths")
+              ) {
+                const shown = bins.reduce((s, b) => s + b.value, 0);
+                const remainder = total - shown;
+                if (remainder > 1e-7) {
+                  bins = [...bins, { key: "other", label: "All other patterns", value: remainder }];
+                }
+              }
+              return {
+                run,
+                bins,
+                total,
+                unit: unitForMeasure(sqlitePlan.measure),
+                sql: sqlitePlan.sql,
+              };
+            }
+
+            const rows = db
+              .query<{ id: number; token: string; value: number }, []>(fallbackSql)
+              .all();
+            const patternBins: Bin[] = rows.map((row) => ({
+              key: String(row.id),
+              label: patternDisplayLabel({
+                id: row.id,
+                key: String(row.id),
+                token: row.token,
+              }),
+              value: row.value,
+              id: row.id,
+              token: row.token,
+            }));
+            const interpreted = interpretSummary(plan.steps, patternBins, totals);
             return {
               run,
               bins: interpreted.bins,

@@ -23,3 +23,8 @@ when changing these pages.
 
 - [Encoding and experiment pipelines](explanation/encoding-and-pipelines.md)
 - [Composing run visualizations](explanation/composable-visualizations.md)
+
+## Architecture decisions
+
+Workstream-scoped ADRs live under `.data/agent-review/workstreams/<id>/adr.md` while a
+workstream is active. Project-level ADRs (when added) live in [`adr/`](adr/).

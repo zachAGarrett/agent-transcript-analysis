@@ -10,8 +10,14 @@ export type MorphismCriteria = {
 };
 
 export type MorphismContract = {
+  /** Human-readable domain description (compat / UI). */
   domain: string;
+  /** Human-readable codomain description (compat / UI). */
   codomain: string;
+  /** Canonical semantic object key for the source region. */
+  source?: string;
+  /** Canonical semantic object key for the target region. */
+  target?: string;
   /** Downstream consumers should reload data after this morphism. */
   reload?: boolean;
   /**
@@ -93,6 +99,10 @@ export type MorphismSpace<
   stateSpace: StateSpace<TState>;
   criteria: Record<TDefs[number]["name"], MorphismCriteria>;
   contracts: Record<TDefs[number]["name"], MorphismContract>;
+  /** Semantic objects when the space was created with a region taxonomy. */
+  objects?: readonly import("./category").SemanticObjectDef<TState>[];
+  /** Certified arrow projection when contract.source/target are set. */
+  arrowOf: (name: string) => import("./category").CertifiedArrow<TState, TContext> | undefined;
   namesByPhase: (phase: MorphismPhase) => TDefs[number]["name"][];
   sessionNames: Set<TDefs[number]["name"]>;
   label: (name: TDefs[number]["name"]) => string;
@@ -121,4 +131,9 @@ export type CreateMorphismSpaceOptions<
   /** Statespace path used for transform effects / before-transition constraints. */
   effectPath: Path<TState>;
   definitions: TDefs;
+  /**
+   * Optional semantic objects. When present and a definition declares
+   * contract.source/target, apply certifies membership and target closure.
+   */
+  objects?: readonly import("./category").SemanticObjectDef<TState>[];
 };

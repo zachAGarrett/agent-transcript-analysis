@@ -1,46 +1,10 @@
 import type { Bin } from "@workstream/viz-algebra";
-import { topWithRemainder } from "@workstream/viz-algebra";
-import { pathMorphismSpace } from "./morphisms/transitions";
-import type { InterpretCtx } from "./morphisms/types";
+import { compileStep } from "./compile";
+import { evaluateIR } from "./evaluate-ir";
+import { concatIR, emptyIR } from "./execution-ir";
+import { SESSION_MORPHISMS } from "./morphisms/transitions";
 import type { PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
-
-type Totals = { mass: number; nodes: number; edgeWeight: number; hubScore: number };
-
-function totalForMeasure(measure: PathState["measure"], totals: Totals): number {
-  if (measure === "vocabulary") return totals.nodes;
-  if (measure === "edge-weight" || measure === "in-edge-weight") return totals.edgeWeight;
-  if (measure === "hub-score") return totals.hubScore;
-  return totals.mass;
-}
-
-/** Fallback for ad-hoc top_k_N steps (tests) not registered as discrete morphisms. */
-function applyTopK(ctx: InterpretCtx, step: PathStep): InterpretCtx {
-  const registered = pathMorphismSpace.interpretOf(step.name);
-  if (registered) return registered(ctx, step);
-  const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-  const total = totalForMeasure(ctx.measure, ctx.totals);
-  if (ctx.summary.grain === "pattern-by-length") {
-    return { ...ctx, limit, hasTopK: true, sql: `${ctx.sql}\n-- top_k_${limit}` };
-  }
-  const bins =
-    ctx.rankedByLength && ctx.summary.grain === "pattern"
-      ? (() => {
-          const top = ctx.summary.bins.slice(0, limit);
-          const remainder = total - top.reduce((sum, bin) => sum + bin.value, 0);
-          return remainder > 0
-            ? [...top, { key: "other", label: "All other patterns", value: remainder }]
-            : top;
-        })()
-      : topWithRemainder(ctx.summary.bins, total, limit);
-  return {
-    ...ctx,
-    summary: { ...ctx.summary, bins },
-    limit,
-    hasTopK: true,
-    sql: `${ctx.sql}\n-- top_k_${limit}`,
-  };
-}
 
 export type InterpretedFacet = {
   bins: Bin[];
@@ -48,80 +12,37 @@ export type InterpretedFacet = {
   unit: string;
   sql: string;
   overview?: boolean;
+  /** Set when the executable plan includes a normalize arrow. */
+  normalized?: boolean;
 };
 
-function unitFor(measure: PathState["measure"]): string {
-  if (measure === "vocabulary") return "patterns";
-  if (measure === "edge-weight") return "outgoing edge weight";
-  if (measure === "in-edge-weight") return "incoming edge weight";
-  if (measure === "hub-score") return "hub score";
-  return "stored counts";
-}
+type Totals = { mass: number; nodes: number; edgeWeight: number; hubScore: number };
 
-/** Apply path steps to an in-memory pattern/edge summary (one run). */
+/**
+ * Apply path steps via the interpretation functor: compile steps → IR → evaluate.
+ * Ad-hoc `top_k_N` (tests / compilePlan limit rewrite) are accepted as IR even when
+ * not discrete registry morphisms. Session morphisms are rejected.
+ */
 export function interpretSummary(
   steps: PathStep[],
   patternBins: Bin[],
   totals: Totals,
 ): InterpretedFacet {
-  let ctx: InterpretCtx = {
-    source: "none",
-    measure: "none",
-    grain: "none",
-    limit: 10,
-    hasTopK: false,
-    rankedByLength: false,
-    sql: "",
-    summary: {
-      scope: "run",
-      grain: "pattern",
-      measure: "stored-count",
-      bins: [],
-    },
-    displayTotal: 0,
-    patternBins,
-    totals,
-  };
-
-  // First pass: load morphisms set source/measure before building bins.
+  let ranked = false;
+  let ir = emptyIR();
   for (const step of steps) {
-    if (!step.name.startsWith("load_")) continue;
-    const interpret = pathMorphismSpace.interpretOf(step.name);
-    if (interpret) ctx = interpret(ctx, step);
-  }
-
-  if (ctx.source === "run-scalars") {
-    return { bins: [], total: 0, unit: "", sql: ctx.sql, overview: true };
-  }
-
-  const binValue = (bin: Bin) => (ctx.measure === "vocabulary" ? 1 : bin.value);
-  const measure = ctx.measure === "none" ? "stored-count" : ctx.measure;
-  const total = totalForMeasure(ctx.measure, totals);
-
-  ctx.summary = {
-    scope: "run",
-    grain: "pattern",
-    measure,
-    bins: patternBins.map((bin) => ({ ...bin, value: binValue(bin) })),
-  };
-  ctx.displayTotal = total;
-
-  for (const step of steps) {
-    if (step.name.startsWith("load_")) continue;
-    if (step.name.startsWith("top_k_")) {
-      ctx = applyTopK(ctx, step);
-      continue;
+    if (SESSION_MORPHISMS.has(step.name)) {
+      throw new Error(`Session morphism not in executable plan: ${step.name}`);
     }
-    const interpret = pathMorphismSpace.interpretOf(step.name);
-    if (interpret) ctx = interpret(ctx, step);
+    let fragment = compileStep(step);
+    if (step.name === "rank_by_length") ranked = true;
+    if (step.name.startsWith("top_k_") && ranked) {
+      const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
+      fragment = { ops: [{ op: "topK", limit, by: "order" }] };
+    }
+    ir = concatIR(ir, fragment);
   }
-
-  return {
-    bins: ctx.summary.bins,
-    total: ctx.displayTotal,
-    unit: unitFor(ctx.measure),
-    sql: ctx.sql || "-- empty",
-  };
+  return evaluateIR(ir, patternBins, totals);
 }
 
 export function pathTitle(state: PathState): { title: string; description: string } {

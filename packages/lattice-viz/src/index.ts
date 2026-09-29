@@ -22,7 +22,10 @@ export {
   sharedDomainMax,
   stamp,
 } from "./charts";
-
+export { compileIdentity, compilePath, compileStep } from "./compile";
+export { evaluateIR } from "./evaluate-ir";
+export type { ExecutionIR, IrOp, MeasureKind } from "./execution-ir";
+export { concatIR, emptyIR, irEquals } from "./execution-ir";
 export type { InterpretedFacet } from "./interpret";
 export {
   interpretSummary,
@@ -31,8 +34,14 @@ export {
   planLimit,
   planNormalized,
 } from "./interpret";
-
 export { patternDisplayLabel, setPatternLabeler } from "./labels";
+export type { PathRegionKey } from "./morphisms/objects";
+export {
+  classifyPathState,
+  isExecutablePlanRegion,
+  pathObjects,
+  pathRegionKey,
+} from "./morphisms/objects";
 export {
   applySelectBin,
   clearSessionTip,
@@ -59,8 +68,14 @@ export type {
   MorphismDef,
   MorphismPhase,
 } from "./morphisms/types";
-
-export { parsePathPlan, revertPathTo, visiblePathSteps } from "./path-plan";
+export { canLowerToSql, optimizeIR } from "./optimize";
+export type { CertifiedPathResult } from "./path-plan";
+export {
+  composeCertifiedPath,
+  parsePathPlan,
+  revertPathTo,
+  visiblePathSteps,
+} from "./path-plan";
 export {
   autoFollowupAfterSelect,
   planRunsForState,

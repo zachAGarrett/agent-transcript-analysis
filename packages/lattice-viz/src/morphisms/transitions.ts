@@ -3,6 +3,7 @@ import { createMorphismSpace } from "@workstream/morphism-space";
 import type { PathState } from "../path-state";
 import { pathStateSchema } from "../path-state";
 import type { PathStep } from "../types";
+import { pathObjects } from "./objects";
 import { morphismDefs } from "./registry";
 import type { InterpretCtx, MorphismContract, MorphismCriteria } from "./types";
 
@@ -15,6 +16,7 @@ export const pathMorphismSpace = createMorphismSpace<
   shape: pathStateSchema,
   effectPath: "tip",
   definitions: morphismDefs,
+  objects: pathObjects,
 });
 
 export const pathSpace = pathMorphismSpace.stateSpace;

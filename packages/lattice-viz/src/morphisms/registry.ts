@@ -107,11 +107,13 @@ function loadDef<N extends string>(
   patch: Pick<PathState, "grain" | "measure" | "source">,
   sql: string,
 ): MorphismDef<N> {
+  const target =
+    patch.grain === "run" || patch.source === "run-scalars" ? "summary.run" : "summary.pattern";
   return {
     name,
     phase: "construction",
     criteria,
-    contract,
+    contract: { ...contract, source: "query", target },
     available: {
       when: (s) => s.tip === "query" && s.source === "none",
       otherwise: "Need query tip.",
@@ -602,12 +604,19 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
       reload: true,
     },
     available: {
-      when: (s) =>
-        s.grain === "length" &&
-        (s.tip === "selected" || s.hasSelection) &&
-        s.selectionLengthKey.length > 0 &&
-        s.selectionLengthKey !== "other" &&
-        isPatternSource(s),
+      when: (s, context) => {
+        if (!isPatternSource(s) || s.grain !== "length") return false;
+        const key = lengthKeyFromContext(context, s.selectionLengthKey);
+        if (!key || key === "other") return false;
+        // Live tip selection, or plan replay with lengthKey in step params.
+        if (s.tip === "selected" || s.hasSelection) return true;
+        return (
+          (s.tip === "committed" || s.tip === "summary" || s.tip === "displayed") &&
+          !!context &&
+          typeof context === "object" &&
+          "lengthKey" in context
+        );
+      },
       otherwise: "Drill needs a length-bin selection on a pattern source.",
     },
     effect: (s, context) => {

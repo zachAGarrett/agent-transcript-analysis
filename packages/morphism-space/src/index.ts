@@ -1,3 +1,16 @@
+export type {
+  CertifiedArrow,
+  CompositionCertificate,
+  SemanticObjectDef,
+} from "./category";
+export {
+  checkAndApply,
+  composeArrows,
+  defineObjects,
+  identityArrow,
+  objectByKey,
+  objectOf,
+} from "./category";
 export { createMorphismSpace } from "./create";
 export type {
   ApplyResult,
