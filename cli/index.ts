@@ -266,11 +266,20 @@ async function cmdExperimentsSweep(args: string[]): Promise<void> {
   const kind = takeFlag(args, "--kind") ?? "decoder";
   if (args.length > 0) usage();
 
+  if (kind !== "decoder" && kind !== "lm") {
+    throw new Error("--kind must be decoder or lm");
+  }
   const count = nRaw !== undefined ? Number(nRaw) : 30;
+  if (nRaw !== undefined && (!Number.isInteger(count) || count <= 0)) {
+    throw new Error("-n must be a positive integer");
+  }
   const holdoutPct = Number(holdoutRaw);
   const seed = Number(seedRaw);
   if (!Number.isFinite(holdoutPct) || holdoutPct <= 0 || holdoutPct >= 100) {
     throw new Error("--holdout must be in (0, 100)");
+  }
+  if (!Number.isInteger(seed)) {
+    throw new Error("--seed must be an integer");
   }
 
   const { DEFAULT_DECODER_SWEEPS, DEFAULT_LM_SWEEPS, runSweeps } = await import(

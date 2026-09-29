@@ -37,38 +37,28 @@ const DEFAULT_LM_SWEEPS: SweepConfig[] = [
 
 export { DEFAULT_DECODER_SWEEPS, DEFAULT_LM_SWEEPS };
 
-export async function evaluateHoldout(
-  train: Sequence[],
+/** Decode holdout against an already-trained pipeline (shared lattice). */
+export function evaluateHoldout(
+  pipeline: ExperimentPipeline,
   holdout: Sequence[],
   config: SweepConfig,
-  dbPath: string,
-): Promise<SweepResult> {
-  const lattice = new Lattice({ filename: dbPath });
-  try {
-    const pipeline = new ExperimentPipeline(lattice);
-    for await (const _ of pipeline.feed(producerFrom(train))) {
-      // ingest
-    }
-    lattice.getTopTokens(1);
-    const compiled = pipeline.compile(
-      config.smoothing !== undefined ? { smoothing: config.smoothing } : undefined,
-    );
-    const traces = [];
-    for (const sequence of holdout) {
-      const t0 = performance.now();
-      const result = pipeline.decode(sequence, config.decodeOptions, compiled);
-      traces.push(traceFromDecode(sequence, sessionIdOf(sequence), result, performance.now() - t0));
-    }
-    const metrics = buildDecodeSummary(traces, compiled.patternCount).metrics;
-    return {
-      name: config.name,
-      metrics,
-      decodeOptions: config.decodeOptions,
-      smoothing: config.smoothing,
-    };
-  } finally {
-    lattice.close();
+): SweepResult {
+  const compiled = pipeline.compile(
+    config.smoothing !== undefined ? { smoothing: config.smoothing } : undefined,
+  );
+  const traces = [];
+  for (const sequence of holdout) {
+    const t0 = performance.now();
+    const result = pipeline.decode(sequence, config.decodeOptions, compiled);
+    traces.push(traceFromDecode(sequence, sessionIdOf(sequence), result, performance.now() - t0));
   }
+  const metrics = buildDecodeSummary(traces, compiled.patternCount).metrics;
+  return {
+    name: config.name,
+    metrics,
+    decodeOptions: config.decodeOptions,
+    smoothing: config.smoothing,
+  };
 }
 
 export type SweepJobOptions = {
@@ -85,18 +75,28 @@ export async function runSweeps(options: SweepJobOptions): Promise<SweepResult[]
     seed: options.seed,
   });
   await mkdir(options.outDir, { recursive: true });
+  const dbPath = join(options.outDir, "lattice.db");
+  const lattice = new Lattice({ filename: dbPath });
   const results: SweepResult[] = [];
-  for (const config of options.configs) {
-    const dbPath = join(options.outDir, `${config.name}.lattice.db`);
-    const result = await evaluateHoldout(split.train, split.holdout, config, dbPath);
-    results.push(result);
-    console.log(
-      `sweep ${config.name}: complete=${result.metrics.completeRate.toFixed(3)} ` +
-        `multi=${result.metrics.multiSymbolCoverage.toFixed(3)} ` +
-        `span=${result.metrics.meanSpan.toFixed(3)} ` +
-        `score=${result.metrics.meanScore.toFixed(3)} ` +
-        `ms=${result.metrics.meanLatencyMs.toFixed(2)}`,
-    );
+  try {
+    const pipeline = new ExperimentPipeline(lattice);
+    for await (const _ of pipeline.feed(producerFrom(split.train))) {
+      // ingest
+    }
+    lattice.getTopTokens(1);
+    for (const config of options.configs) {
+      const result = evaluateHoldout(pipeline, split.holdout, config);
+      results.push(result);
+      console.log(
+        `sweep ${config.name}: complete=${result.metrics.completeRate.toFixed(3)} ` +
+          `multi=${result.metrics.multiSymbolCoverage.toFixed(3)} ` +
+          `span=${result.metrics.meanSpan.toFixed(3)} ` +
+          `score=${result.metrics.meanScore.toFixed(3)} ` +
+          `ms=${result.metrics.meanLatencyMs.toFixed(2)}`,
+      );
+    }
+  } finally {
+    lattice.close();
   }
   await writeFile(join(options.outDir, "sweeps.json"), `${JSON.stringify(results, null, 2)}\n`);
   return results;
