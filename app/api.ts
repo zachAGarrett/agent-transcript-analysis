@@ -132,10 +132,20 @@ export async function handleApi(request: Request): Promise<Response> {
       result = await listDecodeTraces(store.root, url.searchParams.get("run") ?? "");
     } else if (url.pathname === "/api/decode-trace") {
       const { readDecodeTrace } = await import("./adapters/decode-traces");
+      const symbolsRaw = url.searchParams.get("symbols");
+      let sourceSymbols: string[] | undefined;
+      if (symbolsRaw) {
+        const parsed: unknown = JSON.parse(symbolsRaw);
+        if (!Array.isArray(parsed) || !parsed.every((s): s is string => typeof s === "string")) {
+          throw new Error("symbols must be a JSON array of strings.");
+        }
+        sourceSymbols = parsed;
+      }
       result = await readDecodeTrace(
         store.root,
         url.searchParams.get("run") ?? "",
         url.searchParams.get("sequence") ?? "",
+        sourceSymbols,
       );
     } else if (url.pathname === "/api/decode-summary") {
       const { readDecodeSummary } = await import("./adapters/decode-traces");

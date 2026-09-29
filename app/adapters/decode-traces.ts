@@ -48,8 +48,14 @@ const MAX_LIST = 500;
 
 function assertSafeRunDir(root: string, runId: string): string {
   if (!/^[\w-]+$/.test(runId)) throw new Error("Invalid run ID.");
-  const rootReal = realpathSync(root);
-  const directory = realpathSync(join(rootReal, runId));
+  let rootReal: string;
+  let directory: string;
+  try {
+    rootReal = realpathSync(root);
+    directory = realpathSync(join(rootReal, runId));
+  } catch {
+    throw new Error(`Run directory not found: ${runId}`);
+  }
   if (!directory.startsWith(`${rootReal}${sep}`)) {
     throw new Error("Run escaped the configured root.");
   }

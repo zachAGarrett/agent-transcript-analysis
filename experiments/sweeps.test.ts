@@ -44,7 +44,7 @@ describe("sweeps", () => {
       const pipeline = new ExperimentPipeline(lattice);
       for (const sequence of train) await pipeline.processOne(sequence);
       lattice.getTopTokens(1);
-      const result = evaluateHoldout(pipeline, [train[0]!], {
+      const result = evaluateHoldout(pipeline, train.slice(0, 1), {
         name: "viterbi",
         decodeOptions: { mode: "viterbi" },
       });

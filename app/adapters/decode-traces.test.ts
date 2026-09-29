@@ -55,6 +55,49 @@ describe("decode-traces adapter", () => {
     expect(detail.aligned[0]?.sourceSymbols).toEqual(["a|"]);
 
     await expect(listDecodeTraces(root, "../escape")).rejects.toThrow(/Invalid run ID/);
+    await expect(listDecodeTraces(root, "missing-run")).rejects.toThrow(/Run directory not found/);
+  });
+
+  test("readDecodeTrace aligns source symbols when provided", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wt-align-"));
+    dirs.push(root);
+    const run = "job-align";
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, run));
+    writeFileSync(
+      join(root, run, "decodes.jsonl"),
+      `${JSON.stringify({
+        id: "s1",
+        sessionId: "s1",
+        symbolCount: 2,
+        result: {
+          tokens: ["a|b|"],
+          steps: [
+            {
+              token: "a|b|",
+              start: 0,
+              end: 2,
+              emissionScore: -1,
+              transitionScore: 0,
+              cumulativeScore: -1,
+            },
+          ],
+          score: -1,
+          complete: true,
+        },
+        multiSymbolCoverage: 1,
+        atomicFallbackRate: 0,
+        meanSpan: 2,
+        segmentsPerStep: 0.5,
+        latencyMs: 0.1,
+      })}\n`,
+    );
+    const withSymbols = await readDecodeTrace(root, run, "s1", ["a|", "b|"]);
+    expect(withSymbols.aligned[0]?.sourceSymbols).toEqual(["a|", "b|"]);
+    expect(withSymbols.warning).toBeUndefined();
+    const without = await readDecodeTrace(root, run, "s1");
+    expect(without.aligned[0]?.sourceSymbols).toEqual([]);
+    expect(without.warning).toMatch(/Source symbols/);
   });
 
   test("reads decode-summary.json", async () => {
