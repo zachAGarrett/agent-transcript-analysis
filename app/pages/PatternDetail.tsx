@@ -80,6 +80,10 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
     (steps?.length ? steps.map((step) => step.brief).join(" → ") : null) ||
     (detail ? formatPatternBriefChain(detail.pattern.token) : null) ||
     title;
+  const encodingFull = detail?.pattern.token ?? "";
+  const encodingShort = encodingFull
+    ? `${formatPatternChain(encodingFull.split("|").filter(Boolean), "|")}|`
+    : "";
 
   return (
     <Dialog
@@ -125,13 +129,13 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <code className="bg-muted max-w-full truncate rounded-md px-2 py-1 font-mono text-[11px]" />
+                      <code className="bg-muted max-w-full rounded-md px-2 py-1 font-mono text-[11px]" />
                     }
                   >
-                    {detail.pattern.token}
+                    {encodingShort}
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm font-mono text-[11px] break-all">
-                    {detail.pattern.token}
+                    {encodingFull}
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -152,32 +156,36 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                       {steps.length > 1 ? ` · ${steps.length} steps` : ""}
                     </span>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 space-y-3">
-                    {steps.map((step, i) => (
-                      <div key={step.full}>
-                        {steps.length > 1 ? (
-                          <p className="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-                            Step {i + 1}
-                          </p>
-                        ) : null}
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                          {step.atoms.length ? (
-                            step.atoms.map((atom) => (
-                              <FragmentPair
-                                key={`${atom.axis}-${atom.value}`}
-                                axis={atom.axis}
-                                value={atom.value}
-                              />
-                            ))
-                          ) : (
-                            <>
-                              <dt className="text-muted-foreground">—</dt>
-                              <dd>(empty)</dd>
-                            </>
-                          )}
-                        </dl>
+                  <CollapsibleContent className="mt-3">
+                    <div className="scroll-fade h-40 overflow-y-auto">
+                      <div className="space-y-3 pr-1">
+                        {steps.map((step, i) => (
+                          <div key={step.full}>
+                            {steps.length > 1 ? (
+                              <p className="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+                                Step {i + 1}
+                              </p>
+                            ) : null}
+                            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+                              {step.atoms.length ? (
+                                step.atoms.map((atom) => (
+                                  <FragmentPair
+                                    key={`${atom.axis}-${atom.value}`}
+                                    axis={atom.axis}
+                                    value={atom.value}
+                                  />
+                                ))
+                              ) : (
+                                <>
+                                  <dt className="text-muted-foreground">—</dt>
+                                  <dd>(empty)</dd>
+                                </>
+                              )}
+                            </dl>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               ) : null}
