@@ -17,9 +17,11 @@ import { patternLengthKey, patternsByLength } from "../pattern-length";
 import type { PathStep, PathStepName } from "../types";
 import type { InterpretCtx, MorphismDef } from "./types";
 
-/** Pattern-level sources (excludes query tip and run overview). */
+/** Lattice pattern sources (excludes query tip, run overview, decode sidecars). */
 function isPatternSource(s: PathState): boolean {
-  return s.source !== Source.none && s.source !== Source.runScalars;
+  return (
+    s.source !== Source.none && s.source !== Source.runScalars && s.source !== Source.decodeSummary
+  );
 }
 
 function totalForMeasure(measure: PathState["measure"], totals: InterpretCtx["totals"]): number {
@@ -121,7 +123,9 @@ function loadDef<N extends string>(
   const target: PathRegionKey =
     patch.grain === Grain.run || patch.source === Source.runScalars
       ? Region.summaryRun
-      : Region.summaryPattern;
+      : patch.grain === Grain.length
+        ? Region.summaryLength
+        : Region.summaryPattern;
   return {
     name,
     phase: Phase.construction,
@@ -292,6 +296,36 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     },
     { grain: Grain.run, measure: Measure.storedCount, source: Source.runScalars },
     "run scalars",
+  ),
+  loadDef(
+    Morphism.loadDecodeSpans,
+    {
+      label: "Decode span lengths",
+      what: "Load held-out decode step span-length histogram from decode-summary.json",
+      not_for: "Lattice node mass, edges, or runs without decode artifacts",
+      examples: ["Decoded span distribution", "How long are decoded segments"],
+    },
+    {
+      domain: "query · source none",
+      codomain: "summary · length · decode-span · decode-summary",
+    },
+    { grain: Grain.length, measure: Measure.decodeSpan, source: Source.decodeSummary },
+    "decode-summary.json spanLengthBins",
+  ),
+  loadDef(
+    Morphism.loadDecodeFallback,
+    {
+      label: "Decode atomic fallback",
+      what: "Load held-out atomic-fallback vs multi-symbol rates from decode-summary.json",
+      not_for: "Lattice node charts without decode artifacts",
+      examples: ["Fallback rate", "Atomic vs multi-symbol decode"],
+    },
+    {
+      domain: "query · source none",
+      codomain: "summary · pattern · decode-fallback · decode-summary",
+    },
+    { grain: Grain.pattern, measure: Measure.decodeFallback, source: Source.decodeSummary },
+    "decode-summary.json fallbackRate",
   ),
   {
     name: Morphism.rollupLength,
@@ -634,7 +668,7 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
           "lengthKey" in context
         );
       },
-      otherwise: "Drill needs a length-bin selection on a pattern source.",
+      otherwise: "Drill needs a length-bin selection on a lattice pattern source.",
     },
     effect: (s, context) => {
       const lengthKey = lengthKeyFromContext(context, s.selectionLengthKey);

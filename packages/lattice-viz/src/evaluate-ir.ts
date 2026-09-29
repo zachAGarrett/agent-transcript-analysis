@@ -12,6 +12,9 @@ function totalForMeasure(measure: MeasureKind, totals: Totals): number {
   if (measure === IrMeasure.edgeWeight || measure === IrMeasure.inEdgeWeight)
     return totals.edgeWeight;
   if (measure === IrMeasure.hubScore) return totals.hubScore;
+  if (measure === IrMeasure.decodeSpan || measure === IrMeasure.decodeFallback) {
+    return totals.mass;
+  }
   return totals.mass;
 }
 
@@ -20,6 +23,8 @@ function unitFor(measure: MeasureKind): string {
   if (measure === IrMeasure.edgeWeight) return "outgoing edge weight";
   if (measure === IrMeasure.inEdgeWeight) return "incoming edge weight";
   if (measure === IrMeasure.hubScore) return "hub score";
+  if (measure === IrMeasure.decodeSpan) return "decode steps";
+  if (measure === IrMeasure.decodeFallback) return "rate";
   return "stored counts";
 }
 
@@ -75,7 +80,7 @@ export function evaluateIR(ir: ExecutionIR, patternBins: Bin[], totals: Totals):
         const binValue = (bin: Bin) => (measure === IrMeasure.vocabulary ? 1 : bin.value);
         summary = {
           scope: "run",
-          grain: Grain.pattern,
+          grain: measure === IrMeasure.decodeSpan ? Grain.length : Grain.pattern,
           measure:
             measure === IrMeasure.storedCount
               ? IrMeasure.storedCount
@@ -85,7 +90,11 @@ export function evaluateIR(ir: ExecutionIR, patternBins: Bin[], totals: Totals):
                   ? IrMeasure.hubScore
                   : measure === IrMeasure.inEdgeWeight
                     ? IrMeasure.inEdgeWeight
-                    : IrMeasure.edgeWeight,
+                    : measure === IrMeasure.decodeSpan
+                      ? IrMeasure.decodeSpan
+                      : measure === IrMeasure.decodeFallback
+                        ? IrMeasure.decodeFallback
+                        : IrMeasure.edgeWeight,
           bins: patternBins.map((bin) => ({ ...bin, value: binValue(bin) })),
         };
         displayTotal = totalForMeasure(measure, totals);

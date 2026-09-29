@@ -28,6 +28,8 @@ export const Measure = {
   edgeWeight: "edge-weight",
   hubScore: "hub-score",
   inEdgeWeight: "in-edge-weight",
+  decodeSpan: "decode-span",
+  decodeFallback: "decode-fallback",
 } as const;
 export type MeasureKind = (typeof Measure)[keyof typeof Measure];
 export const MeasureValues = Object.values(Measure) as MeasureKind[];
@@ -40,6 +42,8 @@ export const IrMeasure = {
   hubScore: "hub-score",
   inEdgeWeight: "in-edge-weight",
   runScalars: "run-scalars",
+  decodeSpan: "decode-span",
+  decodeFallback: "decode-fallback",
 } as const;
 export type IrMeasureKind = (typeof IrMeasure)[keyof typeof IrMeasure];
 
@@ -51,6 +55,7 @@ export const Source = {
   patternHub: "pattern-hub",
   inEdgeWeight: "in-edge-weight",
   runScalars: "run-scalars",
+  decodeSummary: "decode-summary",
 } as const;
 export type SourceKind = (typeof Source)[keyof typeof Source];
 export const SourceValues = Object.values(Source) as SourceKind[];
@@ -95,6 +100,8 @@ export const Morphism = {
   loadHub: "load_hub",
   loadInDegree: "load_in_degree",
   loadRunScalars: "load_run_scalars",
+  loadDecodeSpans: "load_decode_spans",
+  loadDecodeFallback: "load_decode_fallback",
   rollupLength: "rollup_length",
   rankByLength: "rank_by_length",
   partitionByLength: "partition_by_length",

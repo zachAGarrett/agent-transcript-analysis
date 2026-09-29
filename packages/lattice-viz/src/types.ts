@@ -33,7 +33,7 @@ export type Run = {
 export type Facet = { run: Run; bins: Bin[]; total: number; unit: string; sql: string };
 export type View = { plan: PathPlan; facets: Facet[]; generatedAt: string; cacheHit: boolean };
 
-export type PatternNeighbor = { id: number; token: string; weight: number };
+export type PatternNeighbor = { id: number; token: string; weight: number; prob?: number };
 export type PatternLinks = {
   rows: PatternNeighbor[];
   total?: number;

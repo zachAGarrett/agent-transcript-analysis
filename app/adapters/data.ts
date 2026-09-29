@@ -21,6 +21,7 @@ import {
   planIsOverview,
 } from "@workstream/lattice-viz";
 import { decodePatternSteps, patternDisplayLabel } from "./decode";
+import { readDecodeSummary } from "./decode-traces";
 import { lowerToSqlite, rowsToBins } from "./sqlite-plan";
 
 export type { Facet, PatternDetail, PatternLinks, Run, View };
@@ -60,6 +61,8 @@ function unitForMeasure(measure: string): string {
   if (measure === IrMeasure.hubScore) return "hub score";
   if (measure === IrMeasure.edgeWeight) return "outgoing edge weight";
   if (measure === IrMeasure.inEdgeWeight) return "incoming edge weight";
+  if (measure === IrMeasure.decodeSpan) return "decode steps";
+  if (measure === IrMeasure.decodeFallback) return "rate";
   return "stored counts";
 }
 
@@ -83,7 +86,13 @@ export class RunStore {
 
   version(id: string): string {
     const path = this.path(id);
-    return [path, `${path}-wal`, join(this.root, id, "report.json")]
+    return [
+      path,
+      `${path}-wal`,
+      join(this.root, id, "report.json"),
+      join(this.root, id, "decodes.jsonl"),
+      join(this.root, id, "decode-summary.json"),
+    ]
       .map((file) => {
         try {
           const s = statSync(file, { bigint: true });
@@ -117,12 +126,23 @@ export class RunStore {
     try {
       if (file.size > 20_000_000) throw new Error("Report too large.");
       const { job } = await file.json();
+      const hasDecodes = await Bun.file(join(this.root, id, "decodes.jsonl")).exists();
+      const hasSummary = await Bun.file(join(this.root, id, "decode-summary.json")).exists();
+      const warnings: string[] = [];
+      if (job?.artifacts?.decodesJsonl && !hasDecodes) {
+        warnings.push("report references decodes.jsonl but the file is missing.");
+      }
+      if (job?.artifacts?.decodeSummaryJson && !hasSummary) {
+        warnings.push("report references decode-summary.json but the file is missing.");
+      }
       return {
         fixture: typeof job?.producer?.dir === "string" ? job.producer.dir : null,
         train: typeof job?.trainCount === "number" ? job.trainCount : null,
         heldOut: typeof job?.heldOutCount === "number" ? job.heldOutCount : null,
         warning:
-          "Legacy report provides context; historical codebook and count semantics are not versioned.",
+          warnings.length > 0
+            ? warnings.join(" ")
+            : "Report provides context; verify codebook version against fixture scheme.",
       };
     } catch {
       return { ...empty, warning: "Report could not be read; provenance is unknown." };
@@ -176,10 +196,61 @@ export class RunStore {
       const isOverview = planIsOverview(plan);
       const { ir } = compilePath(plan.steps);
       const optimized = optimizeIR(ir);
-      const sqlitePlan = !isOverview && canLowerToSql(optimized) ? lowerToSqlite(optimized) : null;
+      const loadOp = optimized.ops.find((o) => o.op === "load");
+      const decodeLoad =
+        loadOp &&
+        "measure" in loadOp &&
+        (loadOp.measure === IrMeasure.decodeSpan || loadOp.measure === IrMeasure.decodeFallback);
+      const sqlitePlan =
+        !isOverview && !decodeLoad && canLowerToSql(optimized) ? lowerToSqlite(optimized) : null;
       const fallbackSql = loadStepSql(plan);
       for (const id of plan.runs) {
         const run = await this.run(id);
+        if (decodeLoad && loadOp && "measure" in loadOp) {
+          const summary = await readDecodeSummary(this.root, id);
+          if (!summary) {
+            facets.push({
+              run,
+              bins: [],
+              total: 0,
+              unit: unitForMeasure(loadOp.measure),
+              sql: "-- missing decode-summary.json",
+            });
+            continue;
+          }
+          let bins: Bin[];
+          let total: number;
+          if (loadOp.measure === IrMeasure.decodeSpan) {
+            bins = summary.spanLengthBins.map((b) => ({
+              key: b.key,
+              label: b.label,
+              value: b.value,
+              token: b.key,
+            }));
+            total = bins.reduce((s, b) => s + b.value, 0);
+          } else {
+            const atomic = summary.fallbackRate;
+            bins = [
+              { key: "atomic", label: "Atomic fallback", value: atomic },
+              { key: "multi", label: "Multi-symbol", value: Math.max(0, 1 - atomic) },
+            ];
+            total = 1;
+          }
+          const interpreted = interpretSummary(plan.steps, bins, {
+            mass: total,
+            nodes: bins.length,
+            edgeWeight: total,
+            hubScore: total,
+          });
+          facets.push({
+            run,
+            bins: interpreted.bins,
+            total: interpreted.total,
+            unit: interpreted.unit || unitForMeasure(loadOp.measure),
+            sql: "-- decode-summary.json",
+          });
+          continue;
+        }
         facets.push(
           this.read(id, (db) => {
             if (isOverview) {
@@ -283,7 +354,14 @@ export class RunStore {
             `SELECT coalesce(sum(weight),0) total,count(*) count FROM edges WHERE ${source}=?`,
           )
           .get(node);
-        return { rows, ...total };
+        const weightTotal = total?.total ?? 0;
+        return {
+          rows: rows.map((row) => ({
+            ...row,
+            prob: weightTotal > 0 ? row.weight / weightTotal : 0,
+          })),
+          ...total,
+        };
       };
       let steps: PatternStep[] | null = null;
       try {

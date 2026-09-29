@@ -278,6 +278,42 @@ describe("follow-up morphisms", () => {
     expect(drillStep?.params?.lengthKey).toBe("2");
   });
 
+  test("decode-summary selects do not enable lattice pattern drills", () => {
+    const { state: spans } = parsePathPlan(
+      {
+        steps: [{ name: Morphism.loadDecodeSpans }, { name: Morphism.commit }],
+        runs: ["run-a"],
+      },
+      ["run-a"],
+    );
+    const spanSel = applyPath(spans, Morphism.selectBin, sel);
+    expect(spanSel.ok).toBe(true);
+    if (!spanSel.ok) return;
+    expect(enabledNames(spanSel.state)).not.toContain(Morphism.drillLengthPatterns);
+    expect(enabledNames(spanSel.state)).not.toContain(Morphism.openPatternDetail);
+
+    const { state: fallback } = parsePathPlan(
+      {
+        steps: [
+          { name: Morphism.loadDecodeFallback },
+          { name: Morphism.topK10 },
+          { name: Morphism.commit },
+        ],
+        runs: ["run-a"],
+      },
+      ["run-a"],
+    );
+    const fbSel = applyPath(fallback, Morphism.selectBin, {
+      runId: "run-a",
+      binKey: "atomic",
+    });
+    expect(fbSel.ok).toBe(true);
+    if (!fbSel.ok) return;
+    expect(enabledNames(fbSel.state)).not.toContain(Morphism.reRollup);
+    expect(enabledNames(fbSel.state)).not.toContain(Morphism.drillLengthPatterns);
+    expect(enabledNames(fbSel.state)).not.toContain(Morphism.openPatternDetail);
+  });
+
   test("pattern-by-length select enables detail, not another drill", () => {
     const { state: committed } = parsePathPlan(
       {

@@ -39,6 +39,9 @@ export function canLowerToSql(ir: ExecutionIR): boolean {
   const load = optimized.ops[0];
   if (load?.op !== IrOpKind.load) return false;
   if (load.measure === IrMeasure.runScalars) return false;
+  if (load.measure === IrMeasure.decodeSpan || load.measure === IrMeasure.decodeFallback) {
+    return false;
+  }
 
   const dataOps = optimized.ops.filter(
     (o) => o.op !== IrOpKind.commit && o.op !== IrOpKind.facet && o.op !== IrOpKind.normalize,

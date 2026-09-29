@@ -21,6 +21,10 @@ function loadMeasure(
       return { measure: IrMeasure.inEdgeWeight, source: Source.inEdgeWeight };
     case Morphism.loadRunScalars:
       return { measure: IrMeasure.runScalars, source: Source.runScalars };
+    case Morphism.loadDecodeSpans:
+      return { measure: IrMeasure.decodeSpan, source: Source.decodeSummary };
+    case Morphism.loadDecodeFallback:
+      return { measure: IrMeasure.decodeFallback, source: Source.decodeSummary };
     default:
       return undefined;
   }

@@ -41,6 +41,12 @@ export const presetPaths: Record<string, PathStep[]> = {
     { name: Morphism.partitionByLength },
     { name: Morphism.commit },
   ],
+  "decode-spans": [{ name: Morphism.loadDecodeSpans }, { name: Morphism.commit }],
+  "decode-fallback": [
+    { name: Morphism.loadDecodeFallback },
+    { name: Morphism.topK10 },
+    { name: Morphism.commit },
+  ],
 };
 
 /** Starter chips shown in the explorer when no path is composed yet. */
@@ -53,4 +59,6 @@ export const explorerStarterPresets: { id: keyof typeof presetPaths; label: stri
   { id: "lengths", label: "Lengths" },
   { id: "lengths-by-edge", label: "Lengths × edge" },
   { id: "lengths-by-hub", label: "Lengths × hub" },
+  { id: "decode-spans", label: "Decode spans" },
+  { id: "decode-fallback", label: "Decode fallback" },
 ];
