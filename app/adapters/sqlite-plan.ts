@@ -33,7 +33,7 @@ function fromClause(measure: MeasureKind): string {
   if (measure === IrMeasure.edgeWeight) {
     return `nodes n LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e ON e.from_id = n.id`;
   }
-  if (measure === "in-edge-weight") {
+  if (measure === IrMeasure.inEdgeWeight) {
     return `nodes n LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e ON e.to_id = n.id`;
   }
   return "nodes";
