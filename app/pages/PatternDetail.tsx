@@ -252,7 +252,9 @@ function NeighborColumn({
                     {patternDisplayLabel({ id: row.id, key: String(row.id), token: row.token })}
                   </span>
                   <span className="text-muted-foreground shrink-0 tabular-nums">
-                    {number(row.weight)}
+                    {row.prob != null
+                      ? `${(row.prob * 100).toFixed(1)}% · ${number(row.weight)}`
+                      : number(row.weight)}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm text-left whitespace-normal">

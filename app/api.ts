@@ -127,6 +127,21 @@ export async function handleApi(request: Request): Promise<Response> {
         node,
         url.searchParams.get("version") ?? "",
       );
+    } else if (url.pathname === "/api/decode-traces") {
+      const { listDecodeTraces } = await import("./adapters/decode-traces");
+      result = await listDecodeTraces(store.root, url.searchParams.get("run") ?? "");
+    } else if (url.pathname === "/api/decode-trace") {
+      const { readDecodeTrace } = await import("./adapters/decode-traces");
+      result = await readDecodeTrace(
+        store.root,
+        url.searchParams.get("run") ?? "",
+        url.searchParams.get("sequence") ?? "",
+      );
+    } else if (url.pathname === "/api/decode-summary") {
+      const { readDecodeSummary } = await import("./adapters/decode-traces");
+      const summary = await readDecodeSummary(store.root, url.searchParams.get("run") ?? "");
+      if (!summary) throw new Error("No decode-summary.json for this run.");
+      result = summary;
     } else return new Response("Not found", { status: 404 });
     return Response.json(result, {
       headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
