@@ -32,4 +32,4 @@ Same CSVs, different producers. Agent-turn stashes user intent in `meta` so it c
 
 ## Canonical artifact
 
-Each experiment run writes `lattice.db` under `experiments/<name>/<version>/runs/<jobId>/`. That SQLite lattice is the source of truth for hubs, decode, and any future queries or charts — not a separate report schema.
+Each experiment run writes `lattice.db` under `experiments/<name>/<version>/runs/<jobId>/`. With `--holdout`, the runner also writes `report.json`, scored `decodes.jsonl` traces, and `decode-summary.json` aggregates. The lattice remains the source of truth for hubs and transitions; decode artifacts are evaluation sidecars (see [experiments reference](../reference/experiments.md)).

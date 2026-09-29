@@ -73,7 +73,7 @@ names, `arrowOf`).
 
 | Kind | Domain | Codomain | Example |
 | --- | --- | --- | --- |
-| Load | `query` | `summary` + grain/measure | `load_pattern_mass`, `load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree` |
+| Load | `query` | `summary` + grain/measure | `load_pattern_mass`, `load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree`, `load_decode_spans`, `load_decode_fallback` |
 | Pushforward | `summary` + pattern, `!hasTopK` | `summary` + length | `rollup_length` (any pattern source) |
 | Order (summary) | `summary` + pattern, `!hasTopK` | same + `rankedByLength` | `rank_by_length` |
 | Partition × display | `summary` + pattern, `!hasTopK` | displayed + `pattern-by-length` + `hasTopK` | `partition_by_length` |
@@ -89,7 +89,8 @@ That composition stays illegal in `enabled`.
 ## Path space (`packages/lattice-viz`)
 
 Construction starts at `query`. Morphisms include sources (`load_pattern_mass`,
-`load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree`, `load_run_scalars`),
+`load_pattern_vocab`, `load_edge_weight`, `load_hub`, `load_in_degree`, `load_run_scalars`,
+`load_decode_spans`, `load_decode_fallback`),
 `rollup_length`, `rank_by_length`, `partition_by_length`, `top_k_*`, `normalize`,
 `facet_runs`, and `commit`. Length construction applies to every pattern source (mass,
 vocab, outgoing/incoming edge weight, hub score)—not only mass/vocab. After commit,
@@ -120,7 +121,10 @@ PathPlan → compilePath → ExecutionIR → optimizeIR
 
 Supported SQL fusions today: `load → top_k`, `load → rollup_length [→ top_k]`,
 `load → re_rollup`. Rank-sensitive top-k, partition-by-length, and drill stay on the
-memory backend until residual/order equivalence is proven. Length SQL uses
+memory backend until residual/order equivalence is proven. Decode-summary loads
+(`load_decode_spans`, `load_decode_fallback`) read `decode-summary.json` sidecars and
+never lower to SQLite. They are terminal for lattice drills (`drill_length_patterns`,
+`partition_by_length`, `re_rollup`): decode bins are not lattice patterns. Length SQL uses
 `MIN(32, LENGTH(token)-LENGTH(REPLACE(token,'|','')))`, matching `patternLengthKey`.
 
 ## Package layout
