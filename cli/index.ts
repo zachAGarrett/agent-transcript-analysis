@@ -19,6 +19,9 @@ function usage(): never {
   cli fixtures prepare [-v <version>] (-t <transcriptId> | -a) [-c <concurrency>]
   cli experiments <name> [-v <version>] [-fv <fixtureVersion>] [-fj <jobId>]
                          [-g <glob>] [-n <count> | -p <pct>]
+                         [--holdout <pct>] [--seed <n>] [--beam <width>] [--unigram]
+  cli experiments sweep [-e <name>] [-fv <fixtureVersion>] [-fj <jobId>] [-n <count>]
+                         [--holdout <pct>] [--seed <n>] [--kind decoder|lm]
   cli score <path-to-lattice.db>
 
 Examples:
@@ -26,8 +29,8 @@ Examples:
   bun cli fixtures prepare -v v2 -t 3478de7b-79b9-458d-9028-1db767ff17fc -c 12
   bun cli fixtures prepare -t 0a146418-e845-4d84-be97-25f32ac5610c
   bun cli experiments agent-turn -fv v1 -n 5
-  bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20
-  bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z
+  bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20 --holdout 20 --seed 1
+  bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z --beam 16
   bun cli score experiments/agent-turn/v1/runs/<jobId>/lattice.db
 `);
   process.exit(1);
@@ -186,6 +189,10 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   const glob = takeFlag(args, "-g") ?? "*.csv";
   const nRaw = takeFlag(args, "-n");
   const pRaw = takeFlag(args, "-p");
+  const holdoutRaw = takeFlag(args, "--holdout");
+  const seedRaw = takeFlag(args, "--seed");
+  const beamRaw = takeFlag(args, "--beam");
+  const unigram = takeBool(args, "--unigram");
   if (args.length > 0) usage();
 
   const count = nRaw !== undefined ? Number(nRaw) : undefined;
@@ -193,6 +200,27 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   if (nRaw !== undefined && !Number.isFinite(count)) throw new Error("-n must be a number");
   if (pRaw !== undefined && (pct === undefined || !Number.isFinite(pct) || pct <= 0 || pct > 100)) {
     throw new Error("-p must be a percent in (0, 100]");
+  }
+  const holdoutPct = holdoutRaw !== undefined ? Number(holdoutRaw) : undefined;
+  if (
+    holdoutRaw !== undefined &&
+    (holdoutPct === undefined ||
+      !Number.isFinite(holdoutPct) ||
+      holdoutPct <= 0 ||
+      holdoutPct >= 100)
+  ) {
+    throw new Error("--holdout must be a percent in (0, 100)");
+  }
+  const seed = seedRaw !== undefined ? Number(seedRaw) : undefined;
+  if (seedRaw !== undefined && (seed === undefined || !Number.isInteger(seed))) {
+    throw new Error("--seed must be an integer");
+  }
+  const beamWidth = beamRaw !== undefined ? Number(beamRaw) : undefined;
+  if (
+    beamRaw !== undefined &&
+    (beamWidth === undefined || !Number.isInteger(beamWidth) || beamWidth <= 0)
+  ) {
+    throw new Error("--beam must be a positive integer");
   }
 
   const definition = await resolveExperiment(name, version);
@@ -202,11 +230,74 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
     throw new Error(`No CSVs matched ${glob} in ${jobDir}`);
   }
 
+  const decodeOptions =
+    beamWidth !== undefined
+      ? { mode: "beam" as const, beamWidth, useBigram: !unigram }
+      : unigram
+        ? { mode: "viterbi" as const, useBigram: false }
+        : undefined;
+
   console.log(
     `Running ${definition.name}@${definition.version} on fixture ${fixtureVersion} job ${jobId} (${selected}/${matched} files)`,
   );
-  const result = await runJob(definition, { paths, fixtureVersion, root: ROOT });
-  console.log(`Done: ${result.latticeDb} (${result.sequenceCount} sequences)`);
+  const result = await runJob(definition, {
+    paths,
+    fixtureVersion,
+    fixtureJobId: jobId,
+    root: ROOT,
+    holdoutPct,
+    seed,
+    decodeOptions,
+  });
+  console.log(
+    `Done: ${result.latticeDb} (train=${result.trainCount} holdout=${result.heldOutCount})`,
+  );
+}
+
+async function cmdExperimentsSweep(args: string[]): Promise<void> {
+  const experimentName = takeFlag(args, "-e") ?? "session-span";
+  const version = takeFlag(args, "-v");
+  const fv = takeFlag(args, "-fv");
+  const fj = takeFlag(args, "-fj");
+  const glob = takeFlag(args, "-g") ?? "*.csv";
+  const nRaw = takeFlag(args, "-n");
+  const holdoutRaw = takeFlag(args, "--holdout") ?? "20";
+  const seedRaw = takeFlag(args, "--seed") ?? "1";
+  const kind = takeFlag(args, "--kind") ?? "decoder";
+  if (args.length > 0) usage();
+
+  const count = nRaw !== undefined ? Number(nRaw) : 30;
+  const holdoutPct = Number(holdoutRaw);
+  const seed = Number(seedRaw);
+  if (!Number.isFinite(holdoutPct) || holdoutPct <= 0 || holdoutPct >= 100) {
+    throw new Error("--holdout must be in (0, 100)");
+  }
+
+  const { DEFAULT_DECODER_SWEEPS, DEFAULT_LM_SWEEPS, runSweeps } = await import(
+    "@/experiments/sweeps"
+  );
+  const { loadAll } = await import("@/experiments/run-job");
+  const definition = await resolveExperiment(experimentName, version);
+  const { version: fixtureVersion, jobDir, jobId } = await resolveFixtureJobDir(fv, fj);
+  const { paths } = await selectCsvPaths(jobDir, glob, count, undefined);
+  const producer = definition.createProducer({
+    paths,
+    fixtureVersion,
+    root: ROOT,
+  });
+  const sequences = await loadAll(producer);
+  const configs = kind === "lm" ? DEFAULT_LM_SWEEPS : DEFAULT_DECODER_SWEEPS;
+  const outDir = join(
+    ROOT,
+    "experiments",
+    definition.name,
+    definition.version,
+    RUNS_DIRNAME,
+    `sweep-${jobId}-${kind}`,
+  );
+  console.log(`Sweep ${kind} on ${definition.name} (${sequences.length} sequences)`);
+  await runSweeps({ sequences, holdoutPct, seed, configs, outDir });
+  console.log(`Wrote ${outDir}/sweeps.json`);
 }
 
 async function main(): Promise<void> {
@@ -225,6 +316,10 @@ async function main(): Promise<void> {
   if (cmd === "experiments") {
     const name = args.shift();
     if (!name) usage();
+    if (name === "sweep") {
+      await cmdExperimentsSweep(args);
+      return;
+    }
     await cmdExperimentsRun(name, args);
     return;
   }
