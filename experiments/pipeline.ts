@@ -1,12 +1,13 @@
 import {
   createFeedState,
   createLZSequencer,
-  createViterbiContext,
-  decode as decodeLattice,
+  type DecodeResult,
+  decodeIndexed,
   feedInputStream,
+  type ICompiledLattice,
   type ILattice,
   type LatticeDecodeOptions,
-  type MatchCandidate,
+  type LmCompileOptions,
   type SequencerInput,
   Unbounded,
 } from "@khoralabs/tkn";
@@ -15,6 +16,8 @@ import type { Producer, Sequence } from "./producers";
 async function* symbolSource(symbols: string[]): AsyncGenerator<SequencerInput> {
   for (const symbol of symbols) yield symbol;
 }
+
+export type DecodeCompileOptions = LmCompileOptions;
 
 /**
  * Experiment pipeline: ingest and decode sequences of compacted composites.
@@ -30,7 +33,7 @@ export class ExperimentPipeline {
 
   constructor(readonly lattice: ILattice) {}
 
-  /** Ingest one sequence; clears the lattice transition cursor afterward. */
+  /** Ingest one sequence; ends the sequencer sequence and clears the lattice transition cursor. */
   async processOne(sequence: Sequence): Promise<void> {
     if (sequence.symbols.length === 0) return;
     await feedInputStream(
@@ -40,6 +43,7 @@ export class ExperimentPipeline {
       this.feedState,
       1000,
     );
+    await this.sequencer.endSequence();
     this.feedState.previousKey = null;
   }
 
@@ -50,50 +54,49 @@ export class ExperimentPipeline {
     }
   }
 
+  /** Compile once per evaluation configuration (default smoothing may use lattice cache). */
+  compile(options?: DecodeCompileOptions): ICompiledLattice {
+    return this.lattice.compile(options);
+  }
+
   /**
-   * Segment a symbol sequence with Viterbi or beam.
-   * Offsets are symbol indices, not characters.
+   * Segment a symbol sequence with Viterbi or beam over atom indices.
+   * Spans are symbol offsets, not characters.
    */
-  decode(sequence: Sequence, options?: LatticeDecodeOptions): string[] {
+  decode(
+    sequence: Sequence,
+    options?: LatticeDecodeOptions,
+    compiled?: ICompiledLattice,
+  ): DecodeResult {
     const symbols = sequence.symbols;
-    const n = symbols.length;
-    if (n === 0) return [];
+    if (symbols.length === 0) {
+      return { tokens: [], steps: [], score: 0, complete: true };
+    }
 
-    const compiled = this.lattice.compile();
-    const vocab = new Set(this.lattice.vocabulary());
-    // Placeholder string of length n so decode walks by symbol index.
-    const placeholder = "\u0001".repeat(n);
+    const snapshot = compiled ?? this.compile();
+    const byStart = snapshot.scanAtoms(symbols);
+    return decodeIndexed(
+      {
+        length: symbols.length,
+        matchCandidates: (offset) => byStart[offset] ?? [],
+        fallbackCandidate: (offset) => {
+          const atom = symbols[offset];
+          return atom === undefined ? null : { pattern: atom, length: 1 };
+        },
+        emissionScore: (token) => snapshot.emissionLogProb(token),
+        transitionWeight: (from, to) => snapshot.transitionLogProb(from, to),
+      },
+      options,
+    );
+  }
 
-    const matchCandidates = (_input: string, offset: number): MatchCandidate[] => {
-      const candidates: MatchCandidate[] = [];
-      let concat = "";
-      for (let k = 1; offset + k <= n; k++) {
-        const next = symbols[offset + k - 1];
-        if (next === undefined) break;
-        concat += next;
-        if (vocab.has(concat)) {
-          candidates.push({ pattern: concat, length: k });
-        }
-      }
-      // Always allow the single next symbol (unknown patterns still segment).
-      const one = symbols[offset];
-      if (one !== undefined && !candidates.some((c) => c.length === 1 && c.pattern === one)) {
-        candidates.push({ pattern: one, length: 1 });
-      }
-      return candidates;
-    };
-
-    const ctx = createViterbiContext({
-      matchCandidates,
-      getTokenCount: () => 0,
-      getTotalEmissions: () => 0,
-      getVocabSize: () => 0,
-      getTransitionWeight: () => null,
-      getOutgoingTotal: () => 0,
-      emissionLogProb: (token) => compiled.emissionLogProb(token),
-      transitionLogProb: (from, to) => compiled.transitionLogProb(from, to),
-    });
-
-    return decodeLattice(placeholder, ctx, options);
+  /** Token strings only (incomplete paths return []). */
+  decodeTokens(
+    sequence: Sequence,
+    options?: LatticeDecodeOptions,
+    compiled?: ICompiledLattice,
+  ): string[] {
+    const result = this.decode(sequence, options, compiled);
+    return result.complete ? result.tokens : [];
   }
 }
