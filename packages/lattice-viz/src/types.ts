@@ -1,8 +1,12 @@
 import type { Bin } from "@workstream/viz-algebra";
+import type { MorphismName } from "./ids";
 
-export type TipKind = "query" | "summary" | "displayed" | "faceted" | "selected" | "committed";
+export type { TipKind } from "./ids";
 
-export type PathStep = { name: string; params?: Record<string, unknown> };
+/** Registered morphism name, or ad-hoc top_k_N from display compilePlan / tests. */
+export type PathStepName = MorphismName | `top_k_${number}`;
+
+export type PathStep = { name: PathStepName; params?: Record<string, unknown> };
 
 /** Serializable morphism path — the render plan. */
 export type PathPlan = {

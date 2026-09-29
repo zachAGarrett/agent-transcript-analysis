@@ -2,6 +2,7 @@ import type { Bin } from "@workstream/viz-algebra";
 import { compileStep } from "./compile";
 import { evaluateIR } from "./evaluate-ir";
 import { concatIR, emptyIR } from "./execution-ir";
+import { IrOpKind, isTopKName, Morphism, TopKBy, topKLimit } from "./ids";
 import { SESSION_MORPHISMS } from "./morphisms/transitions";
 import type { PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
@@ -35,10 +36,13 @@ export function interpretSummary(
       throw new Error(`Session morphism not in executable plan: ${step.name}`);
     }
     let fragment = compileStep(step);
-    if (step.name === "rank_by_length") ranked = true;
-    if (step.name.startsWith("top_k_") && ranked) {
-      const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-      fragment = { ops: [{ op: "topK", limit, by: "order" }] };
+    if (step.name === Morphism.rankByLength) ranked = true;
+    if (isTopKName(step.name) && ranked) {
+      fragment = {
+        ops: [
+          { op: IrOpKind.topK, limit: topKLimit(step.name, step.params?.limit), by: TopKBy.order },
+        ],
+      };
     }
     ir = concatIR(ir, fragment);
   }
@@ -46,24 +50,24 @@ export function interpretSummary(
 }
 
 export function pathTitle(state: PathState): { title: string; description: string } {
-  const parts = state.steps.map((s) => s.name).filter((n) => n !== "commit");
+  const parts = state.steps.map((s) => s.name).filter((n) => n !== Morphism.commit);
   const title = parts.length ? parts.join(" → ") : "Empty path";
   const description = `${state.source} · ${state.grain} · ${state.measure}${state.faceted ? " · faceted" : ""}${state.normalized ? " · normalized" : ""}`;
   return { title, description };
 }
 
 export function planNormalized(plan: PathPlan): boolean {
-  return plan.steps.some((s) => s.name === "normalize");
+  return plan.steps.some((s) => s.name === Morphism.normalize);
 }
 
 export function planLimit(plan: PathPlan): number {
   for (let i = plan.steps.length - 1; i >= 0; i--) {
     const step = plan.steps[i];
     if (!step) continue;
-    if (step.name.startsWith("top_k_")) {
-      return Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
+    if (isTopKName(step.name)) {
+      return topKLimit(step.name, step.params?.limit);
     }
-    if (step.name === "partition_by_length" || step.name === "drill_length_patterns") {
+    if (step.name === Morphism.partitionByLength || step.name === Morphism.drillLengthPatterns) {
       return Number(step.params?.limit) || 10;
     }
   }
@@ -71,5 +75,5 @@ export function planLimit(plan: PathPlan): number {
 }
 
 export function planIsOverview(plan: PathPlan): boolean {
-  return plan.steps.some((s) => s.name === "load_run_scalars");
+  return plan.steps.some((s) => s.name === Morphism.loadRunScalars);
 }

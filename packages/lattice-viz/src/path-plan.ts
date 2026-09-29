@@ -1,4 +1,5 @@
 import type { CompositionCertificate } from "@workstream/morphism-space";
+import { Morphism, Source, Tip } from "./ids";
 import { classifyPathState } from "./morphisms/objects";
 import { clearSessionTip } from "./morphisms/registry";
 import { applyPath, enabledNames, SESSION_MORPHISMS } from "./morphisms/transitions";
@@ -85,7 +86,7 @@ export function composeCertifiedPath(steps: PathStep[]): CertifiedPathResult {
 export function visiblePathSteps(steps: PathStep[]): { step: PathStep; index: number }[] {
   return steps
     .map((step, index) => ({ step, index }))
-    .filter(({ step }) => step.name !== "commit" && !SESSION_MORPHISMS.has(step.name));
+    .filter(({ step }) => step.name !== Morphism.commit && !SESSION_MORPHISMS.has(step.name));
 }
 
 /**
@@ -104,11 +105,11 @@ export function revertPathTo(
   const truncated = steps.slice(0, throughIndex + 1);
   let { state, certificate } = composeCertifiedPath(truncated);
   if (!certificate.ok) throw new Error(certificate.error ?? "Illegal path.");
-  if (state.tip !== "committed") {
-    if (!enabledNames(state).includes("commit")) {
+  if (state.tip !== Tip.committed) {
+    if (!enabledNames(state).includes(Morphism.commit)) {
       throw new Error("Path tip is not viewable after truncate.");
     }
-    const committed = composeCertifiedPath([...truncated, { name: "commit" }]);
+    const committed = composeCertifiedPath([...truncated, { name: Morphism.commit }]);
     if (!committed.certificate.ok) throw new Error(committed.certificate.error ?? "commit failed");
     state = committed.state;
     certificate = committed.certificate;
@@ -117,7 +118,7 @@ export function revertPathTo(
   let outRuns: string[];
   if (runs && runs.length > 0) {
     outRuns = runs;
-  } else if (state.faceted || state.source === "run-scalars") {
+  } else if (state.faceted || state.source === Source.runScalars) {
     outRuns = catalogRuns.slice(0, 12);
   } else {
     outRuns = catalogRuns.slice(0, 1);
@@ -138,13 +139,13 @@ export function parsePathPlan(
   if (steps.some((s) => !s || typeof s.name !== "string")) throw new Error("Invalid step.");
   const { state, certificate } = composeCertifiedPath(steps);
   if (!certificate.ok) throw new Error(certificate.error ?? "Illegal path.");
-  if (state.tip !== "committed") {
+  if (state.tip !== Tip.committed) {
     throw new Error("Path must end committed.");
   }
   let runs: string[];
   if (Array.isArray(raw.runs) && raw.runs.length > 0) {
     runs = raw.runs as string[];
-  } else if (state.faceted || state.source === "run-scalars") {
+  } else if (state.faceted || state.source === Source.runScalars) {
     runs = catalogRuns.slice(0, 12);
   } else {
     runs = catalogRuns.slice(0, 1);

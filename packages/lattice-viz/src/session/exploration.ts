@@ -1,3 +1,4 @@
+import { isTopKName, Morphism, topKName } from "../ids";
 import type { PathState, SelectionContext } from "../path-state";
 import { initialPathState } from "../path-state";
 import type { PathPlan, PathStep } from "../types";
@@ -67,30 +68,30 @@ export function emptySession(): ExplorationSession {
  * before commit — the single boundary replacing ad-hoc plan surgery.
  */
 export function compilePlan(session: ExplorationSession): PathPlan {
-  const overview = session.steps.some((s) => s.name === "load_run_scalars");
+  const overview = session.steps.some((s) => s.name === Morphism.loadRunScalars);
   let steps = session.steps.map((s) =>
-    s.name.startsWith("top_k_")
-      ? { name: `top_k_${session.display.limit}`, params: { limit: session.display.limit } }
+    isTopKName(s.name)
+      ? { name: topKName(session.display.limit), params: { limit: session.display.limit } }
       : { ...s },
   );
 
-  const hasNorm = steps.some((s) => s.name === "normalize");
+  const hasNorm = steps.some((s) => s.name === Morphism.normalize);
   if (session.display.normalized && !hasNorm && !overview) {
-    const i = steps.findIndex((s) => s.name === "commit");
-    steps.splice(i >= 0 ? i : steps.length, 0, { name: "normalize" });
+    const i = steps.findIndex((s) => s.name === Morphism.commit);
+    steps.splice(i >= 0 ? i : steps.length, 0, { name: Morphism.normalize });
   }
   if (!session.display.normalized && hasNorm) {
-    steps = steps.filter((s) => s.name !== "normalize");
+    steps = steps.filter((s) => s.name !== Morphism.normalize);
   }
 
   const wantCompare = session.display.faceted || overview;
-  const hasFacet = steps.some((s) => s.name === "facet_runs");
+  const hasFacet = steps.some((s) => s.name === Morphism.facetRuns);
   if (wantCompare && !hasFacet && !overview) {
-    const i = steps.findIndex((s) => s.name === "commit");
-    steps.splice(i >= 0 ? i : steps.length, 0, { name: "facet_runs" });
+    const i = steps.findIndex((s) => s.name === Morphism.commit);
+    steps.splice(i >= 0 ? i : steps.length, 0, { name: Morphism.facetRuns });
   }
   if (!wantCompare && hasFacet) {
-    steps = steps.filter((s) => s.name !== "facet_runs");
+    steps = steps.filter((s) => s.name !== Morphism.facetRuns);
   }
 
   const catalogRuns = session.catalogRuns;

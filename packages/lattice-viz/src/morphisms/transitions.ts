@@ -1,5 +1,6 @@
 import { StateSpaceRepository } from "@statespace/core";
 import { createMorphismSpace } from "@workstream/morphism-space";
+import { EffectPath } from "../ids";
 import type { PathState } from "../path-state";
 import { pathStateSchema } from "../path-state";
 import type { PathStep } from "../types";
@@ -14,7 +15,7 @@ export const pathMorphismSpace = createMorphismSpace<
   typeof morphismDefs
 >({
   shape: pathStateSchema,
-  effectPath: "tip",
+  effectPath: EffectPath.tip,
   definitions: morphismDefs,
   objects: pathObjects,
 });

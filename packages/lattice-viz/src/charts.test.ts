@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { facetChartModel, formatChartValue, isResidual, sharedDomainMax } from "./charts";
+import { Grain, Source, Tip } from "./ids";
 import { initialPathState } from "./path-state";
 import type { Facet, View } from "./types";
 
@@ -48,7 +49,7 @@ describe("chart boundary", () => {
       1,
       true,
       null,
-      { ...initialPathState, tip: "committed", grain: "pattern", source: "pattern-mass" },
+      { ...initialPathState, tip: Tip.committed, grain: Grain.pattern, source: Source.patternMass },
     );
     expect(model.normalized).toBe(true);
     expect(model.rows[0]?.value).toBeCloseTo(20 / 30);

@@ -23,4 +23,4 @@ export type {
   MorphismPhase,
   MorphismSpace,
 } from "./types";
-export { defineMorphisms } from "./types";
+export { defineMorphisms, Phase } from "./types";

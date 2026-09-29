@@ -1,4 +1,5 @@
 import type { ExecutionIR, IrOp } from "./execution-ir";
+import { IrMeasure, IrOpKind, TopKBy } from "./ids";
 
 /**
  * Denotation-preserving rewrites. Never move rollup through top-k, and never
@@ -11,7 +12,7 @@ export function optimizeIR(ir: ExecutionIR): ExecutionIR {
   const out: IrOp[] = [];
   let seenNormalize = false;
   for (const op of ops) {
-    if (op.op === "normalize") {
+    if (op.op === IrOpKind.normalize) {
       if (seenNormalize) continue;
       seenNormalize = true;
     }
@@ -25,33 +26,33 @@ export function canLowerToSql(ir: ExecutionIR): boolean {
   const optimized = optimizeIR(ir);
   let hasRank = false;
   for (const op of optimized.ops) {
-    if (op.op === "rankByLength") hasRank = true;
-    if (op.op === "topK" && (op.by === "order" || hasRank)) return false;
-    if (op.op === "focusRun") return false;
+    if (op.op === IrOpKind.rankByLength) hasRank = true;
+    if (op.op === IrOpKind.topK && (op.by === TopKBy.order || hasRank)) return false;
+    if (op.op === IrOpKind.focusRun) return false;
   }
   // Supported: load (+ optional rollupLength) (+ optional topK by value)
   // or load + partitionByLength or load + filterLength
   // or load + reRollup
   const kinds = optimized.ops.map((o) => o.op);
-  if (kinds.includes("load") && kinds[0] !== "load") return false;
-  if (kinds.filter((k) => k === "load").length !== 1) return false;
+  if (kinds.includes(IrOpKind.load) && kinds[0] !== IrOpKind.load) return false;
+  if (kinds.filter((k) => k === IrOpKind.load).length !== 1) return false;
   const load = optimized.ops[0];
-  if (load?.op !== "load") return false;
-  if (load.measure === "run-scalars") return false;
+  if (load?.op !== IrOpKind.load) return false;
+  if (load.measure === IrMeasure.runScalars) return false;
 
   const dataOps = optimized.ops.filter(
-    (o) => o.op !== "commit" && o.op !== "facet" && o.op !== "normalize",
+    (o) => o.op !== IrOpKind.commit && o.op !== IrOpKind.facet && o.op !== IrOpKind.normalize,
   );
   // load only
   if (dataOps.length === 1) return true;
   // load → rollupLength [→ topK]
-  if (dataOps[1]?.op === "rollupLength") {
-    return dataOps.length === 2 || (dataOps.length === 3 && dataOps[2]?.op === "topK");
+  if (dataOps[1]?.op === IrOpKind.rollupLength) {
+    return dataOps.length === 2 || (dataOps.length === 3 && dataOps[2]?.op === IrOpKind.topK);
   }
   // load → topK
-  if (dataOps[1]?.op === "topK" && dataOps.length === 2) return true;
+  if (dataOps[1]?.op === IrOpKind.topK && dataOps.length === 2) return true;
   // load → reRollup (same denotation as rollup from full population)
   // partition/filterLength stay in-memory until residual SQL is proven.
-  if (dataOps.length === 2 && dataOps[1]?.op === "reRollup") return true;
+  if (dataOps.length === 2 && dataOps[1]?.op === IrOpKind.reRollup) return true;
   return false;
 }

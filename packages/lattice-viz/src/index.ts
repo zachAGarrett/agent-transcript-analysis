@@ -26,6 +26,41 @@ export { compileIdentity, compilePath, compileStep } from "./compile";
 export { evaluateIR } from "./evaluate-ir";
 export type { ExecutionIR, IrOp, MeasureKind } from "./execution-ir";
 export { concatIR, emptyIR, irEquals } from "./execution-ir";
+export type {
+  GrainKind,
+  IrMeasureKind,
+  IrOpName,
+  MeasureKind as PathMeasureKind,
+  MorphismName,
+  PathRegionKey,
+  PatternSourceKind,
+  SourceKind,
+  TipKind,
+  TopKByKind,
+} from "./ids";
+export {
+  EffectPath,
+  Grain,
+  GrainValues,
+  IrMeasure,
+  IrOpKind,
+  isTopKName,
+  Measure,
+  MeasureValues,
+  Morphism,
+  MorphismValues,
+  Region,
+  RegionValues,
+  ResidualKey,
+  Source,
+  SourceValues,
+  Tip,
+  TipValues,
+  TOP_K_PREFIX,
+  TopKBy,
+  topKLimit,
+  topKName,
+} from "./ids";
 export type { InterpretedFacet } from "./interpret";
 export {
   interpretSummary,
@@ -35,7 +70,6 @@ export {
   planNormalized,
 } from "./interpret";
 export { patternDisplayLabel, setPatternLabeler } from "./labels";
-export type { PathRegionKey } from "./morphisms/objects";
 export {
   classifyPathState,
   isExecutablePlanRegion,
@@ -106,6 +140,7 @@ export type {
   Facet,
   PathPlan,
   PathStep,
+  PathStepName,
   PatternAtom,
   PatternDetail,
   PatternLabeler,
@@ -113,7 +148,6 @@ export type {
   PatternNeighbor,
   PatternStep,
   Run,
-  TipKind,
   View,
 } from "./types";
 export { defaultPatternLabeler } from "./types";

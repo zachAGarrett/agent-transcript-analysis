@@ -3,6 +3,7 @@ import type { Bin } from "@workstream/viz-algebra";
 import { compileIdentity, compilePath, compileStep } from "./compile";
 import { evaluateIR } from "./evaluate-ir";
 import { concatIR, emptyIR, irEquals } from "./execution-ir";
+import { Morphism, topKName } from "./ids";
 import { interpretSummary } from "./interpret";
 import { presetPaths } from "./presets";
 
@@ -19,14 +20,14 @@ describe("interpretation functor", () => {
   });
 
   test("F(g ∘ f) = F(g) ∘ F(f) for load → top_k → commit", () => {
-    const f = compileStep({ name: "load_pattern_mass" });
-    const g = compileStep({ name: "top_k_10" });
-    const h = compileStep({ name: "commit" });
+    const f = compileStep({ name: Morphism.loadPatternMass });
+    const g = compileStep({ name: Morphism.topK10 });
+    const h = compileStep({ name: Morphism.commit });
     const composed = concatIR(concatIR(f, g), h);
     const { ir, certificate } = compilePath([
-      { name: "load_pattern_mass" },
-      { name: "top_k_10" },
-      { name: "commit" },
+      { name: Morphism.loadPatternMass },
+      { name: Morphism.topK10 },
+      { name: Morphism.commit },
     ]);
     expect(certificate.ok).toBe(true);
     expect(irEquals(ir, composed)).toBe(true);
@@ -50,9 +51,9 @@ describe("interpretation functor", () => {
 
   test("rank then top-k uses order-based cut", () => {
     const steps = [
-      { name: "load_pattern_mass" },
-      { name: "rank_by_length" },
-      { name: "top_k_1", params: { limit: 1 } },
+      { name: Morphism.loadPatternMass },
+      { name: Morphism.rankByLength },
+      { name: topKName(1), params: { limit: 1 } },
     ];
     // Ad-hoc top_k_1 is IR-legal even when not a discrete registry morphism.
     const facet = interpretSummary(steps, bins, totals);
@@ -62,10 +63,10 @@ describe("interpretation functor", () => {
 
   test("normalize op sets normalized flag without changing bin values", () => {
     const { ir } = compilePath([
-      { name: "load_pattern_mass" },
-      { name: "top_k_10" },
-      { name: "normalize" },
-      { name: "commit" },
+      { name: Morphism.loadPatternMass },
+      { name: Morphism.topK10 },
+      { name: Morphism.normalize },
+      { name: Morphism.commit },
     ]);
     const facet = evaluateIR(ir, bins, totals);
     expect(facet.normalized).toBe(true);
@@ -73,6 +74,6 @@ describe("interpretation functor", () => {
   });
 
   test("session morphisms are rejected by compileStep", () => {
-    expect(() => compileStep({ name: "select_bin" })).toThrow(/Session morphism/);
+    expect(() => compileStep({ name: Morphism.selectBin })).toThrow(/Session morphism/);
   });
 });

@@ -1,10 +1,13 @@
-import type { PathPlan, PathState, PathStep } from "@workstream/lattice-viz";
+import type { PathPlan, PathState, PathStep, PathStepName } from "@workstream/lattice-viz";
 import {
   applyPath,
   enabledNames,
   initialPathState,
+  Morphism,
   morphismCriteria,
   morphismLabel,
+  Source,
+  Tip,
 } from "@workstream/lattice-viz";
 import { type JevCallMetrics, resolveChoiceLabel, systemOneChoice } from "../../api/jev";
 import type { DecideHooks, DecideResponse, DecideStep } from "./decide-types";
@@ -28,7 +31,7 @@ function addMetrics(a: JevCallMetrics, b: JevCallMetrics): JevCallMetrics {
 
 function materialize(state: PathState, catalogRuns: string[]): PathPlan {
   const runs =
-    state.faceted || state.source === "run-scalars"
+    state.faceted || state.source === Source.runScalars
       ? catalogRuns.slice(0, 12)
       : catalogRuns.slice(0, 1);
   if (runs.length < 1) throw new Error("No runs available.");
@@ -37,7 +40,7 @@ function materialize(state: PathState, catalogRuns: string[]): PathPlan {
 
 /** Forced pick only: commit when legal, else unique enabled name. */
 function forcedPick(legal: string[]): string | null {
-  if (legal.includes("commit")) return "commit";
+  if (legal.includes(Morphism.commit)) return Morphism.commit;
   if (legal.length === 1) return legal[0] ?? null;
   return null;
 }
@@ -55,51 +58,57 @@ export function rulesPick(question: string, legal: string[]): string | null {
   const loads = legal.filter((n) => n.startsWith("load_"));
   if (loads.length > 1) {
     if (
-      has(legal, "load_hub") &&
+      has(legal, Morphism.loadHub) &&
       /\b(hub|central|centrality|well[- ]?connected|pagerank)\b/.test(q)
     ) {
-      return "load_hub";
+      return Morphism.loadHub;
     }
     if (
-      has(legal, "load_in_degree") &&
+      has(legal, Morphism.loadInDegree) &&
       /\b(incoming|in[- ]?degree|sink|attractor|converge)\b/.test(q)
     ) {
-      return "load_in_degree";
+      return Morphism.loadInDegree;
     }
     if (
-      has(legal, "load_edge_weight") &&
+      has(legal, Morphism.loadEdgeWeight) &&
       /\b(outgoing|out[- ]?degree|connect|connectivity|branch|junction)\b/.test(q)
     ) {
-      return "load_edge_weight";
+      return Morphism.loadEdgeWeight;
     }
-    if (has(legal, "load_pattern_vocab") && /\b(vocab|vocabulary|distinct|unique)\b/.test(q)) {
-      return "load_pattern_vocab";
+    if (has(legal, Morphism.loadPatternVocab) && /\b(vocab|vocabulary|distinct|unique)\b/.test(q)) {
+      return Morphism.loadPatternVocab;
     }
-    if (has(legal, "load_run_scalars") && /\b(overview|compare runs|run scalars?)\b/.test(q)) {
-      return "load_run_scalars";
+    if (has(legal, Morphism.loadRunScalars) && /\b(overview|compare runs|run scalars?)\b/.test(q)) {
+      return Morphism.loadRunScalars;
     }
     // Default pattern load when the question looks chart-like or mentions patterns/length.
     if (
-      has(legal, "load_pattern_mass") &&
+      has(legal, Morphism.loadPatternMass) &&
       /\b(lengths?|longest|mass|frequent|dominant|top|patterns?|show|chart|view)\b/.test(q)
     ) {
-      return "load_pattern_mass";
+      return Morphism.loadPatternMass;
     }
   }
 
-  if (has(legal, "rank_by_length") && /\blongest\b/.test(q)) return "rank_by_length";
-  if (has(legal, "partition_by_length") && /\b(per length|top per|patterns by length)\b/.test(q)) {
-    return "partition_by_length";
+  if (has(legal, Morphism.rankByLength) && /\blongest\b/.test(q)) return Morphism.rankByLength;
+  if (
+    has(legal, Morphism.partitionByLength) &&
+    /\b(per length|top per|patterns by length)\b/.test(q)
+  ) {
+    return Morphism.partitionByLength;
   }
-  if (has(legal, "rollup_length") && /\b(lengths?|how long|complexity|distribution)\b/.test(q)) {
-    return "rollup_length";
+  if (
+    has(legal, Morphism.rollupLength) &&
+    /\b(lengths?|how long|complexity|distribution)\b/.test(q)
+  ) {
+    return Morphism.rollupLength;
   }
 
   if (
-    has(legal, "top_k_10") &&
+    has(legal, Morphism.topK10) &&
     /\b(top|dominant|frequent|mass|hub|incoming|outgoing|vocab|connect|patterns?|longest)\b/.test(q)
   ) {
-    return "top_k_10";
+    return Morphism.topK10;
   }
 
   return null;
@@ -114,7 +123,7 @@ export async function proposePathRules(
   let state = initialPathState;
   const trace: DecideStep[] = [];
   for (let i = 0; i < MAX_LOOP; i++) {
-    if (state.tip === "committed") break;
+    if (state.tip === Tip.committed) break;
     const legal = enabledNames(state);
     if (legal.length === 0) break;
     const pick = rulesPick(question, legal);
@@ -125,9 +134,9 @@ export async function proposePathRules(
     const step = { id: pick, label: morphismLabel(pick) };
     trace.push(step);
     await hooks?.onStep?.(step);
-    if (pick === "commit") break;
+    if (pick === Morphism.commit) break;
   }
-  if (state.tip !== "committed") {
+  if (state.tip !== Tip.committed) {
     return { plan: null, state: null, source: "rules", steps: trace };
   }
   const plan = materialize(state, catalogRuns);
@@ -152,7 +161,7 @@ export async function proposePathWithJev(
   const history: PathStep[] = [];
 
   for (let i = 0; i < MAX_LOOP; i++) {
-    if (state.tip === "committed") break;
+    if (state.tip === Tip.committed) break;
     const legal = enabledNames(state);
     if (legal.length === 0) break;
 
@@ -194,14 +203,14 @@ export async function proposePathWithJev(
     const next = applyPath(state, picked);
     if (!next.ok) return proposePathRules(question, catalogRuns);
     state = next.state;
-    history.push({ name: picked });
+    history.push({ name: picked as PathStepName });
     const step = { id: picked, label: morphismLabel(picked) };
     trace.push(step);
     await hooks?.onStep?.(step);
-    if (picked === "commit") break;
+    if (picked === Morphism.commit) break;
   }
 
-  if (state.tip !== "committed") {
+  if (state.tip !== Tip.committed) {
     return { plan: null, state: null, source: "jev", steps: trace, metrics };
   }
   return {

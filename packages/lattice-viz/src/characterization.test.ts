@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Bin } from "@workstream/viz-algebra";
+import { Morphism, Tip } from "./ids";
 import { interpretSummary } from "./interpret";
 import { morphismDefs } from "./morphisms/registry";
 import { applyPath, enabledNames, SESSION_MORPHISMS } from "./morphisms/transitions";
@@ -35,7 +36,7 @@ describe("characterization: enabled/apply parity", () => {
   });
 
   test("after load_pattern_mass: parity holds", () => {
-    const loaded = applyPath(initialPathState, "load_pattern_mass");
+    const loaded = applyPath(initialPathState, Morphism.loadPatternMass);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     assertEnabledApplyParity(loaded.state);
@@ -43,7 +44,7 @@ describe("characterization: enabled/apply parity", () => {
 
   test("after top_k_10 and commit: session select parity", () => {
     let state = initialPathState;
-    for (const name of ["load_pattern_mass", "top_k_10", "commit"] as const) {
+    for (const name of [Morphism.loadPatternMass, Morphism.topK10, Morphism.commit] as const) {
       const next = applyPath(state, name);
       expect(next.ok).toBe(true);
       if (!next.ok) return;
@@ -60,7 +61,7 @@ describe("characterization: state replay vs interpret", () => {
     for (const [name, steps] of Object.entries(presetPaths)) {
       expect(steps.some((s) => SESSION_MORPHISMS.has(s.name))).toBe(false);
       const { plan, state } = parsePathPlan({ steps, runs: ["run-a"] }, ["run-a"]);
-      expect(state.tip).toBe("committed");
+      expect(state.tip).toBe(Tip.committed);
       expect(plan.steps.map((s) => s.name)).toEqual(state.steps.map((s) => s.name));
       expect(name.length).toBeGreaterThan(0);
     }
@@ -100,7 +101,7 @@ describe("characterization: contract metadata vs executable guards", () => {
 
   test("session morphisms never append plan steps", () => {
     let state = initialPathState;
-    for (const name of ["load_pattern_mass", "top_k_10", "commit"] as const) {
+    for (const name of [Morphism.loadPatternMass, Morphism.topK10, Morphism.commit] as const) {
       const next = applyPath(state, name);
       expect(next.ok).toBe(true);
       if (!next.ok) return;
@@ -108,10 +109,10 @@ describe("characterization: contract metadata vs executable guards", () => {
     }
     const planLen = state.steps.length;
     const sel = { runId: "run-a", binKey: "1", patternId: 1 };
-    const selected = applyPath(state, "select_bin", sel);
+    const selected = applyPath(state, Morphism.selectBin, sel);
     expect(selected.ok).toBe(true);
     if (!selected.ok) return;
     expect(selected.state.steps.length).toBe(planLen);
-    expect(SESSION_MORPHISMS.has("select_bin")).toBe(true);
+    expect(SESSION_MORPHISMS.has(Morphism.selectBin)).toBe(true);
   });
 });

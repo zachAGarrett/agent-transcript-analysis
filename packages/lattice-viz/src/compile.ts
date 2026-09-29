@@ -1,23 +1,26 @@
 import type { CompositionCertificate } from "@workstream/morphism-space";
 import { concatIR, type ExecutionIR, emptyIR, type IrOp, type MeasureKind } from "./execution-ir";
+import { IrMeasure, IrOpKind, isTopKName, Morphism, Source, TopKBy, topKLimit } from "./ids";
 import { SESSION_MORPHISMS } from "./morphisms/transitions";
 import { composeCertifiedPath } from "./path-plan";
 import type { PathStep } from "./types";
 
-function loadMeasure(name: string): { measure: MeasureKind; source: string } | undefined {
+function loadMeasure(
+  name: string,
+): { measure: MeasureKind; source: Exclude<import("./ids").SourceKind, "none"> } | undefined {
   switch (name) {
-    case "load_pattern_mass":
-      return { measure: "stored-count", source: "pattern-mass" };
-    case "load_pattern_vocab":
-      return { measure: "vocabulary", source: "pattern-vocab" };
-    case "load_edge_weight":
-      return { measure: "edge-weight", source: "edge-weight" };
-    case "load_hub":
-      return { measure: "hub-score", source: "pattern-hub" };
-    case "load_in_degree":
-      return { measure: "in-edge-weight", source: "in-edge-weight" };
-    case "load_run_scalars":
-      return { measure: "run-scalars", source: "run-scalars" };
+    case Morphism.loadPatternMass:
+      return { measure: IrMeasure.storedCount, source: Source.patternMass };
+    case Morphism.loadPatternVocab:
+      return { measure: IrMeasure.vocabulary, source: Source.patternVocab };
+    case Morphism.loadEdgeWeight:
+      return { measure: IrMeasure.edgeWeight, source: Source.edgeWeight };
+    case Morphism.loadHub:
+      return { measure: IrMeasure.hubScore, source: Source.patternHub };
+    case Morphism.loadInDegree:
+      return { measure: IrMeasure.inEdgeWeight, source: Source.inEdgeWeight };
+    case Morphism.loadRunScalars:
+      return { measure: IrMeasure.runScalars, source: Source.runScalars };
     default:
       return undefined;
   }
@@ -30,35 +33,38 @@ export function compileStep(step: PathStep): ExecutionIR {
   }
 
   const load = loadMeasure(step.name);
-  if (load) return { ops: [{ op: "load", ...load }] };
+  if (load) return { ops: [{ op: IrOpKind.load, ...load }] };
 
-  if (step.name === "rollup_length") return { ops: [{ op: "rollupLength" }] };
-  if (step.name === "rank_by_length") return { ops: [{ op: "rankByLength" }] };
-  if (step.name === "normalize") return { ops: [{ op: "normalize" }] };
-  if (step.name === "facet_runs") return { ops: [{ op: "facet" }] };
-  if (step.name === "commit") return { ops: [{ op: "commit" }] };
-  if (step.name === "re_rollup") return { ops: [{ op: "reRollup" }] };
+  if (step.name === Morphism.rollupLength) return { ops: [{ op: IrOpKind.rollupLength }] };
+  if (step.name === Morphism.rankByLength) return { ops: [{ op: IrOpKind.rankByLength }] };
+  if (step.name === Morphism.normalize) return { ops: [{ op: IrOpKind.normalize }] };
+  if (step.name === Morphism.facetRuns) return { ops: [{ op: IrOpKind.facet }] };
+  if (step.name === Morphism.commit) return { ops: [{ op: IrOpKind.commit }] };
+  if (step.name === Morphism.reRollup) return { ops: [{ op: IrOpKind.reRollup }] };
 
-  if (step.name.startsWith("top_k_")) {
-    const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-    return { ops: [{ op: "topK", limit, by: "value" }] };
+  if (isTopKName(step.name)) {
+    return {
+      ops: [
+        { op: IrOpKind.topK, limit: topKLimit(step.name, step.params?.limit), by: TopKBy.value },
+      ],
+    };
   }
 
-  if (step.name === "partition_by_length") {
+  if (step.name === Morphism.partitionByLength) {
     const limit = Number(step.params?.limit) || 10;
-    return { ops: [{ op: "partitionByLength", limit }] };
+    return { ops: [{ op: IrOpKind.partitionByLength, limit }] };
   }
 
-  if (step.name === "drill_length_patterns") {
+  if (step.name === Morphism.drillLengthPatterns) {
     const lengthKey = String(step.params?.lengthKey ?? "");
     const limit = Number(step.params?.limit) || 10;
     if (!lengthKey) throw new Error("drill_length_patterns requires lengthKey.");
-    return { ops: [{ op: "filterLength", lengthKey, limit }] };
+    return { ops: [{ op: IrOpKind.filterLength, lengthKey, limit }] };
   }
 
-  if (step.name === "focus_run") {
+  if (step.name === Morphism.focusRun) {
     const runId = String(step.params?.runId ?? "");
-    return { ops: [{ op: "focusRun", runId }] };
+    return { ops: [{ op: IrOpKind.focusRun, runId }] };
   }
 
   throw new Error(`Unknown plan step: ${step.name}`);
@@ -94,10 +100,13 @@ export function compilePath(steps: PathStep[]): {
       };
     }
     let fragment = compileStep(step);
-    if (step.name === "rank_by_length") ranked = true;
-    if (step.name.startsWith("top_k_") && ranked) {
-      const limit = Number(step.params?.limit ?? step.name.replace("top_k_", "")) || 10;
-      fragment = { ops: [{ op: "topK", limit, by: "order" }] };
+    if (step.name === Morphism.rankByLength) ranked = true;
+    if (isTopKName(step.name) && ranked) {
+      fragment = {
+        ops: [
+          { op: IrOpKind.topK, limit: topKLimit(step.name, step.params?.limit), by: TopKBy.order },
+        ],
+      };
     }
     ir = concatIR(ir, fragment);
   }

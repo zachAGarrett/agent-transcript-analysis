@@ -1,3 +1,4 @@
+import { Morphism, Source } from "./ids";
 import { applySelectBin } from "./morphisms/registry";
 import type { PathState, SelectionContext } from "./path-state";
 
@@ -18,7 +19,7 @@ export function restoreSessionTip(
 }
 
 /** Prefer a single automatic continuation after select_bin when the tip enables it. */
-const AUTO_AFTER_SELECT = ["drill_length_patterns", "open_pattern_detail"] as const;
+const AUTO_AFTER_SELECT = [Morphism.drillLengthPatterns, Morphism.openPatternDetail] as const;
 
 export function autoFollowupAfterSelect(
   enabled: string[],
@@ -48,5 +49,5 @@ export function planRunsForState(state: PathState, sessionRuns: string[]): strin
 }
 
 export function stateIsOverview(state: PathState | null | undefined): boolean {
-  return state?.source === "run-scalars";
+  return state?.source === Source.runScalars;
 }

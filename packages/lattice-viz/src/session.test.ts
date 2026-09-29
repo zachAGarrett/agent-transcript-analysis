@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Morphism } from "./ids";
 import {
   applyPath,
   autoFollowupAfterSelect,
@@ -19,11 +20,18 @@ import {
 describe("compilePlan display controls", () => {
   test("planIsOverview detects run scalars load", () => {
     expect(
-      planIsOverview({ steps: [{ name: "load_run_scalars" }, { name: "commit" }], runs: ["a"] }),
+      planIsOverview({
+        steps: [{ name: Morphism.loadRunScalars }, { name: Morphism.commit }],
+        runs: ["a"],
+      }),
     ).toBe(true);
     expect(
       planIsOverview({
-        steps: [{ name: "load_pattern_mass" }, { name: "top_k_10" }, { name: "commit" }],
+        steps: [
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.topK10 },
+          { name: Morphism.commit },
+        ],
         runs: ["a"],
       }),
     ).toBe(false);
@@ -32,7 +40,11 @@ describe("compilePlan display controls", () => {
   test("compilePlan inserts normalize and facet before commit", () => {
     const { state } = parsePathPlan(
       {
-        steps: [{ name: "load_pattern_mass" }, { name: "top_k_5" }, { name: "commit" }],
+        steps: [
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.topK5 },
+          { name: Morphism.commit },
+        ],
         runs: ["a"],
       },
       ["a", "b"],
@@ -44,11 +56,11 @@ describe("compilePlan display controls", () => {
     });
     const next = compilePlan(session);
     expect(next.steps.map((s) => s.name)).toEqual([
-      "load_pattern_mass",
-      "top_k_10",
-      "normalize",
-      "facet_runs",
-      "commit",
+      Morphism.loadPatternMass,
+      Morphism.topK10,
+      Morphism.normalize,
+      Morphism.facetRuns,
+      Morphism.commit,
     ]);
     expect(next.runs).toEqual(["a", "b"]);
   });
@@ -57,24 +69,24 @@ describe("compilePlan display controls", () => {
     const { state } = parsePathPlan(
       {
         steps: [
-          { name: "load_pattern_mass" },
-          { name: "top_k_10" },
-          { name: "facet_runs" },
-          { name: "commit" },
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.topK10 },
+          { name: Morphism.facetRuns },
+          { name: Morphism.commit },
         ],
         runs: ["a", "b"],
       },
       ["a", "b"],
     );
     let session = sessionFromPathState(state, ["a", "b"], "a");
-    const selected = applyPath(state, "select_bin", {
+    const selected = applyPath(state, Morphism.selectBin, {
       runId: "b",
       binKey: "1",
       patternId: 1,
     });
     expect(selected.ok).toBe(true);
     if (!selected.ok) return;
-    const focused = applyPath(selected.state, "focus_run");
+    const focused = applyPath(selected.state, Morphism.focusRun);
     expect(focused.ok).toBe(true);
     if (!focused.ok) return;
     session = withPathState(session, focused.state, ["b"]);
@@ -88,18 +100,18 @@ describe("compilePlan display controls", () => {
 
 describe("morphism contract UI flags", () => {
   test("reload and userFollowup flags cover known follow-ups", () => {
-    expect(morphismReloads("re_rollup")).toBe(true);
-    expect(morphismReloads("drill_length_patterns")).toBe(true);
-    expect(morphismReloads("focus_run")).toBe(true);
-    expect(morphismReloads("select_bin")).toBe(false);
-    expect(morphismReloads("clear_selection")).toBe(false);
+    expect(morphismReloads(Morphism.reRollup)).toBe(true);
+    expect(morphismReloads(Morphism.drillLengthPatterns)).toBe(true);
+    expect(morphismReloads(Morphism.focusRun)).toBe(true);
+    expect(morphismReloads(Morphism.selectBin)).toBe(false);
+    expect(morphismReloads(Morphism.clearSelection)).toBe(false);
 
-    expect(isUserFollowupChip("re_rollup")).toBe(true);
-    expect(isUserFollowupChip("clear_selection")).toBe(true);
-    expect(isUserFollowupChip("select_bin")).toBe(false);
-    expect(isUserFollowupChip("commit")).toBe(false);
-    expect(isUserFollowupChip("open_pattern_detail")).toBe(false);
-    expect(isUserFollowupChip("close_pattern_detail")).toBe(false);
+    expect(isUserFollowupChip(Morphism.reRollup)).toBe(true);
+    expect(isUserFollowupChip(Morphism.clearSelection)).toBe(true);
+    expect(isUserFollowupChip(Morphism.selectBin)).toBe(false);
+    expect(isUserFollowupChip(Morphism.commit)).toBe(false);
+    expect(isUserFollowupChip(Morphism.openPatternDetail)).toBe(false);
+    expect(isUserFollowupChip(Morphism.closePatternDetail)).toBe(false);
 
     for (const name of Object.keys(morphismContracts)) {
       expect(typeof morphismReloads(name)).toBe("boolean");
@@ -111,16 +123,16 @@ describe("morphism contract UI flags", () => {
     const { state } = parsePathPlan(
       {
         steps: [
-          { name: "load_pattern_mass" },
-          { name: "top_k_10" },
-          { name: "facet_runs" },
-          { name: "commit" },
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.topK10 },
+          { name: Morphism.facetRuns },
+          { name: Morphism.commit },
         ],
         runs: ["run-a", "run-b"],
       },
       ["run-a", "run-b"],
     );
-    const selected = applyPath(state, "select_bin", {
+    const selected = applyPath(state, Morphism.selectBin, {
       runId: "run-b",
       binKey: "1",
       patternId: 1,
@@ -128,7 +140,7 @@ describe("morphism contract UI flags", () => {
     expect(selected.ok).toBe(true);
     if (!selected.ok) return;
     expect(planRunsForState(selected.state, ["run-a", "run-b"])).toEqual(["run-a", "run-b"]);
-    const focused = applyPath(selected.state, "focus_run");
+    const focused = applyPath(selected.state, Morphism.focusRun);
     expect(focused.ok).toBe(true);
     if (!focused.ok) return;
     expect(planRunsForState(focused.state, ["run-a", "run-b"])).toEqual(["run-b"]);
@@ -136,24 +148,28 @@ describe("morphism contract UI flags", () => {
   });
 
   test("autoFollowupAfterSelect prefers drill then detail", () => {
-    expect(autoFollowupAfterSelect(["clear_selection", "focus_run"])).toBe(null);
-    expect(autoFollowupAfterSelect(["drill_length_patterns", "open_pattern_detail"])).toBe(
-      "drill_length_patterns",
-    );
-    expect(autoFollowupAfterSelect(["open_pattern_detail", "clear_selection"])).toBe(
-      "open_pattern_detail",
+    expect(autoFollowupAfterSelect([Morphism.clearSelection, Morphism.focusRun])).toBe(null);
+    expect(
+      autoFollowupAfterSelect([Morphism.drillLengthPatterns, Morphism.openPatternDetail]),
+    ).toBe(Morphism.drillLengthPatterns);
+    expect(autoFollowupAfterSelect([Morphism.openPatternDetail, Morphism.clearSelection])).toBe(
+      Morphism.openPatternDetail,
     );
   });
 
   test("length select enables drill only when grain is length", () => {
     const { state } = parsePathPlan(
       {
-        steps: [{ name: "load_pattern_mass" }, { name: "rollup_length" }, { name: "commit" }],
+        steps: [
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.rollupLength },
+          { name: Morphism.commit },
+        ],
         runs: ["run-a"],
       },
       ["run-a"],
     );
-    const selected = applyPath(state, "select_bin", {
+    const selected = applyPath(state, Morphism.selectBin, {
       runId: "run-a",
       binKey: "3",
       lengthKey: "3",
@@ -161,7 +177,7 @@ describe("morphism contract UI flags", () => {
     expect(selected.ok).toBe(true);
     if (!selected.ok) return;
     const enabled = enabledNames(selected.state, selectionContextFromState(selected.state));
-    expect(enabled).toContain("drill_length_patterns");
-    expect(autoFollowupAfterSelect(enabled)).toBe("drill_length_patterns");
+    expect(enabled).toContain(Morphism.drillLengthPatterns);
+    expect(autoFollowupAfterSelect(enabled)).toBe(Morphism.drillLengthPatterns);
   });
 });

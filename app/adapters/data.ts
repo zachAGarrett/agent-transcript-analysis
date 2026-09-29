@@ -14,7 +14,9 @@ import type {
 import {
   canLowerToSql,
   compilePath,
+  IrMeasure,
   interpretSummary,
+  Morphism,
   optimizeIR,
   planIsOverview,
 } from "@workstream/lattice-viz";
@@ -29,13 +31,13 @@ const edgesSql = `SELECT count(*) edges, coalesce(sum(weight),0) edgeWeight,
   coalesce(max(weight),0) maxWeight FROM edges`;
 
 const loadSql: Record<string, string> = {
-  load_pattern_mass: "SELECT id, token, token_count value FROM nodes",
-  load_pattern_vocab: "SELECT id, token, token_count value FROM nodes",
-  load_hub: "SELECT id, token, hub_score value FROM nodes",
-  load_edge_weight: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
+  [Morphism.loadPatternMass]: "SELECT id, token, token_count value FROM nodes",
+  [Morphism.loadPatternVocab]: "SELECT id, token, token_count value FROM nodes",
+  [Morphism.loadHub]: "SELECT id, token, hub_score value FROM nodes",
+  [Morphism.loadEdgeWeight]: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
 LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e
 ON e.from_id = n.id`,
-  load_in_degree: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
+  [Morphism.loadInDegree]: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
 LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e
 ON e.to_id = n.id`,
 };
@@ -47,17 +49,17 @@ function loadStepSql(plan: PathPlan): string {
 }
 
 function totalForMeasure(measure: string, run: Run): number {
-  if (measure === "vocabulary") return run.nodes;
-  if (measure === "hub-score") return run.hubScore;
-  if (measure === "edge-weight" || measure === "in-edge-weight") return run.edgeWeight;
+  if (measure === IrMeasure.vocabulary) return run.nodes;
+  if (measure === IrMeasure.hubScore) return run.hubScore;
+  if (measure === IrMeasure.edgeWeight || measure === IrMeasure.inEdgeWeight) return run.edgeWeight;
   return run.mass;
 }
 
 function unitForMeasure(measure: string): string {
-  if (measure === "vocabulary") return "patterns";
-  if (measure === "hub-score") return "hub score";
-  if (measure === "edge-weight") return "outgoing edge weight";
-  if (measure === "in-edge-weight") return "incoming edge weight";
+  if (measure === IrMeasure.vocabulary) return "patterns";
+  if (measure === IrMeasure.hubScore) return "hub score";
+  if (measure === IrMeasure.edgeWeight) return "outgoing edge weight";
+  if (measure === IrMeasure.inEdgeWeight) return "incoming edge weight";
   return "stored counts";
 }
 

@@ -1,6 +1,11 @@
 import type { Path, Schema, StateSpace } from "@statespace/core";
 
-export type MorphismPhase = "construction" | "display" | "session";
+export const Phase = {
+  construction: "construction",
+  display: "display",
+  session: "session",
+} as const;
+export type MorphismPhase = (typeof Phase)[keyof typeof Phase];
 
 export type MorphismCriteria = {
   label: string;

@@ -7,6 +7,7 @@ import {
   canLowerToSql,
   compilePath,
   interpretSummary,
+  Morphism,
   optimizeIR,
   type PathPlan,
 } from "@workstream/lattice-viz";
@@ -46,7 +47,11 @@ test("SQL lowering and memory agree for top-k mass and length rollup", async () 
   const { store, db } = fixture();
   try {
     const patterns: PathPlan = {
-      steps: [{ name: "load_pattern_mass" }, { name: "top_k_5" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadPatternMass },
+        { name: Morphism.topK5 },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     };
     const { ir } = compilePath(patterns.steps);
@@ -60,7 +65,11 @@ test("SQL lowering and memory agree for top-k mass and length rollup", async () 
     expect(facet?.sql).toContain("LIMIT");
 
     const lengths: PathPlan = {
-      steps: [{ name: "load_pattern_mass" }, { name: "rollup_length" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadPatternMass },
+        { name: Morphism.rollupLength },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     };
     const lengthView = await store.view(lengths);
@@ -97,10 +106,10 @@ test("SQL lowering and memory agree for top-k mass and length rollup", async () 
 
 test("rank-sensitive paths stay on memory backend", () => {
   const { ir } = compilePath([
-    { name: "load_pattern_mass" },
-    { name: "rank_by_length" },
-    { name: "top_k_5" },
-    { name: "commit" },
+    { name: Morphism.loadPatternMass },
+    { name: Morphism.rankByLength },
+    { name: Morphism.topK5 },
+    { name: Morphism.commit },
   ]);
   expect(canLowerToSql(optimizeIR(ir))).toBe(false);
 });

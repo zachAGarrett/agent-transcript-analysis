@@ -3,19 +3,19 @@
  * from executable-plan paths. Optimizer rewrites preserve denotation.
  */
 
-export type MeasureKind =
-  | "stored-count"
-  | "vocabulary"
-  | "edge-weight"
-  | "hub-score"
-  | "in-edge-weight"
-  | "run-scalars";
+import type { IrMeasureKind, IrOpName, SourceKind, TopKByKind } from "./ids";
+
+export type MeasureKind = IrMeasureKind;
+export type { IrOpName };
+
+/** Load source is any SourceKind except PathState's idle `none`. */
+export type IrLoadSource = Exclude<SourceKind, "none">;
 
 export type IrOp =
-  | { op: "load"; measure: MeasureKind; source: string }
+  | { op: "load"; measure: MeasureKind; source: IrLoadSource }
   | { op: "rollupLength" }
   | { op: "rankByLength" }
-  | { op: "topK"; limit: number; by: "value" | "order" }
+  | { op: "topK"; limit: number; by: TopKByKind }
   | { op: "partitionByLength"; limit: number }
   | { op: "filterLength"; lengthKey: string; limit: number }
   | { op: "normalize" }

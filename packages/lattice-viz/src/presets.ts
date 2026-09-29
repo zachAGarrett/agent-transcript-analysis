@@ -1,20 +1,45 @@
+import { Morphism } from "./ids";
 import type { PathStep } from "./types";
 
 /** Named preset paths (macros for docs/rules — not a separate plan type). */
 export const presetPaths: Record<string, PathStep[]> = {
-  overview: [{ name: "load_run_scalars" }, { name: "commit" }],
-  patterns: [{ name: "load_pattern_mass" }, { name: "top_k_10" }, { name: "commit" }],
-  vocabulary: [{ name: "load_pattern_vocab" }, { name: "top_k_10" }, { name: "commit" }],
-  lengths: [{ name: "load_pattern_mass" }, { name: "rollup_length" }, { name: "commit" }],
-  connectivity: [{ name: "load_edge_weight" }, { name: "top_k_10" }, { name: "commit" }],
-  hubs: [{ name: "load_hub" }, { name: "top_k_10" }, { name: "commit" }],
-  inflows: [{ name: "load_in_degree" }, { name: "top_k_10" }, { name: "commit" }],
-  "lengths-by-edge": [{ name: "load_edge_weight" }, { name: "rollup_length" }, { name: "commit" }],
-  "lengths-by-hub": [{ name: "load_hub" }, { name: "rollup_length" }, { name: "commit" }],
+  overview: [{ name: Morphism.loadRunScalars }, { name: Morphism.commit }],
+  patterns: [
+    { name: Morphism.loadPatternMass },
+    { name: Morphism.topK10 },
+    { name: Morphism.commit },
+  ],
+  vocabulary: [
+    { name: Morphism.loadPatternVocab },
+    { name: Morphism.topK10 },
+    { name: Morphism.commit },
+  ],
+  lengths: [
+    { name: Morphism.loadPatternMass },
+    { name: Morphism.rollupLength },
+    { name: Morphism.commit },
+  ],
+  connectivity: [
+    { name: Morphism.loadEdgeWeight },
+    { name: Morphism.topK10 },
+    { name: Morphism.commit },
+  ],
+  hubs: [{ name: Morphism.loadHub }, { name: Morphism.topK10 }, { name: Morphism.commit }],
+  inflows: [{ name: Morphism.loadInDegree }, { name: Morphism.topK10 }, { name: Morphism.commit }],
+  "lengths-by-edge": [
+    { name: Morphism.loadEdgeWeight },
+    { name: Morphism.rollupLength },
+    { name: Morphism.commit },
+  ],
+  "lengths-by-hub": [
+    { name: Morphism.loadHub },
+    { name: Morphism.rollupLength },
+    { name: Morphism.commit },
+  ],
   "patterns-by-length": [
-    { name: "load_pattern_mass" },
-    { name: "partition_by_length" },
-    { name: "commit" },
+    { name: Morphism.loadPatternMass },
+    { name: Morphism.partitionByLength },
+    { name: Morphism.commit },
   ],
 };
 

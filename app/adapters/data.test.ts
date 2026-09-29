@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PathPlan } from "@workstream/lattice-viz";
+import { Morphism } from "@workstream/lattice-viz";
 import { RunStore } from "./data";
 
 const roots: string[] = [];
@@ -27,7 +28,7 @@ function fixture() {
   return { root, db, store: new RunStore(root), path };
 }
 const patternsPlan: PathPlan = {
-  steps: [{ name: "load_pattern_mass" }, { name: "top_k_5" }, { name: "commit" }],
+  steps: [{ name: Morphism.loadPatternMass }, { name: Morphism.topK5 }, { name: Morphism.commit }],
   runs: ["run-a"],
 };
 test("bounded top-k conserves full count mass; no node or score writes", async () => {
@@ -39,30 +40,46 @@ test("bounded top-k conserves full count mass; no node or score writes", async (
     expect(facet?.bins.length).toBe(6);
     expect(facet?.bins.reduce((sum, bin) => sum + bin.value, 0)).toBe(45);
     const lengths = await store.view({
-      steps: [{ name: "load_pattern_mass" }, { name: "rollup_length" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadPatternMass },
+        { name: Morphism.rollupLength },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     });
     expect(lengths.facets[0]?.bins.reduce((sum, bin) => sum + bin.value, 0)).toBe(45);
     const graph = await store.view({
-      steps: [{ name: "load_edge_weight" }, { name: "top_k_10" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadEdgeWeight },
+        { name: Morphism.topK10 },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     });
     expect(graph.facets[0]?.bins[0]?.value).toBe(5);
     expect(graph.facets[0]?.total).toBe(6);
     const hubs = await store.view({
-      steps: [{ name: "load_hub" }, { name: "top_k_10" }, { name: "commit" }],
+      steps: [{ name: Morphism.loadHub }, { name: Morphism.topK10 }, { name: Morphism.commit }],
       runs: ["run-a"],
     });
     expect(hubs.facets[0]?.bins[0]?.id).toBe(9);
     expect(hubs.facets[0]?.unit).toBe("hub score");
     const inflows = await store.view({
-      steps: [{ name: "load_in_degree" }, { name: "top_k_10" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadInDegree },
+        { name: Morphism.topK10 },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     });
     expect(inflows.facets[0]?.bins.find((b) => b.id === 1)?.value).toBe(3);
     expect(inflows.facets[0]?.total).toBe(6);
     const byEdgeLen = await store.view({
-      steps: [{ name: "load_edge_weight" }, { name: "rollup_length" }, { name: "commit" }],
+      steps: [
+        { name: Morphism.loadEdgeWeight },
+        { name: Morphism.rollupLength },
+        { name: Morphism.commit },
+      ],
       runs: ["run-a"],
     });
     expect(byEdgeLen.facets[0]?.bins.reduce((sum, bin) => sum + bin.value, 0)).toBe(6);

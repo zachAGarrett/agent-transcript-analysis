@@ -1,18 +1,25 @@
 import type { Schema } from "@statespace/core";
-import type { PathStep, TipKind } from "./types";
+import {
+  Grain,
+  type GrainKind,
+  GrainValues,
+  Measure,
+  type MeasureKind,
+  MeasureValues,
+  Source,
+  type SourceKind,
+  SourceValues,
+  Tip,
+  type TipKind,
+  TipValues,
+} from "./ids";
+import type { PathStep } from "./types";
 
 export type PathState = {
   tip: TipKind;
-  grain: "none" | "run" | "pattern" | "length" | "pattern-by-length";
-  measure: "none" | "stored-count" | "vocabulary" | "edge-weight" | "hub-score" | "in-edge-weight";
-  source:
-    | "none"
-    | "pattern-mass"
-    | "pattern-vocab"
-    | "edge-weight"
-    | "pattern-hub"
-    | "in-edge-weight"
-    | "run-scalars";
+  grain: GrainKind;
+  measure: MeasureKind;
+  source: SourceKind;
   faceted: boolean;
   normalized: boolean;
   hasTopK: boolean;
@@ -35,10 +42,10 @@ export type SelectionContext = {
 };
 
 export const initialPathState: PathState = {
-  tip: "query",
-  grain: "none",
-  measure: "none",
-  source: "none",
+  tip: Tip.query,
+  grain: Grain.none,
+  measure: Measure.none,
+  source: Source.none,
   faceted: false,
   normalized: false,
   hasTopK: false,
@@ -77,24 +84,16 @@ export const pathStateSchema: Schema<PathState> = {
   properties: {
     tip: {
       type: "string",
-      enum: ["query", "summary", "displayed", "faceted", "selected", "committed"],
+      enum: TipValues,
     },
-    grain: { type: "string", enum: ["none", "run", "pattern", "length", "pattern-by-length"] },
+    grain: { type: "string", enum: GrainValues },
     measure: {
       type: "string",
-      enum: ["none", "stored-count", "vocabulary", "edge-weight", "hub-score", "in-edge-weight"],
+      enum: MeasureValues,
     },
     source: {
       type: "string",
-      enum: [
-        "none",
-        "pattern-mass",
-        "pattern-vocab",
-        "edge-weight",
-        "pattern-hub",
-        "in-edge-weight",
-        "run-scalars",
-      ],
+      enum: SourceValues,
     },
     faceted: { type: "boolean" },
     normalized: { type: "boolean" },

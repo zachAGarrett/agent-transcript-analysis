@@ -1,4 +1,5 @@
 import { normalize } from "@workstream/viz-algebra";
+import { Grain, ResidualKey } from "./ids";
 import { patternDisplayLabel } from "./labels";
 import type { PathState, SelectionContext } from "./path-state";
 import type { Facet, View } from "./types";
@@ -10,14 +11,14 @@ export const stamp = (id: string) =>
   `${id.slice(5, 10)} · ${id.slice(11, 16).replace("-", ":")} UTC`;
 
 export function isResidual(key: string) {
-  return key === "other" || key.endsWith(":other");
+  return key === ResidualKey.other || key.endsWith(`:${ResidualKey.other}`);
 }
 
 export function lengthKeyForBin(binKey: string, pathState: PathState | null): string | undefined {
-  if (pathState?.grain === "length" && !isResidual(binKey)) return binKey;
+  if (pathState?.grain === Grain.length && !isResidual(binKey)) return binKey;
   if (binKey.includes(":")) {
     const prefix = binKey.split(":")[0] ?? "";
-    if (prefix && prefix !== "other") return prefix;
+    if (prefix && prefix !== ResidualKey.other) return prefix;
   }
   return undefined;
 }
