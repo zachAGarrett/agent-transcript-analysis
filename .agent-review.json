@@ -6,7 +6,7 @@
   },
   "skillsDirs": [".agents/skills"],
   "instructions": [],
-  "blockOn": ["error"],
+  "blockOn": ["warning"],
   "maxDiffBytes": 200000,
   "defaultScope": "staged",
   "outputDir": ".data/agent-review",
