@@ -7,7 +7,7 @@
       "dependencies": {
         "@base-ui/react": "^1.8.0",
         "@khoralabs/agent-review": "^0.2.2",
-        "@khoralabs/tkn": "^0.1.0",
+        "@khoralabs/tkn": "^0.2.0",
         "@statespace/core": "workspace:*",
         "@workstream/lattice-viz": "workspace:*",
         "@workstream/viz-algebra": "workspace:*",
@@ -203,7 +203,7 @@
 
     "@khoralabs/agent-review": ["@khoralabs/agent-review@0.2.2", "", { "dependencies": { "@khoralabs/agent-capabilities": "^0.2.0", "@khoralabs/agent-capabilities-ai-sdk": "^0.2.0", "@khoralabs/agent-capabilities-otel": "^0.2.0", "@opentelemetry/api": "^1.9.1", "ai": "^7.0.9", "just-bash": "^3.2.0", "pino": "^9", "yaml": "^2.8.0", "zod": "^4.4.3" }, "bin": { "agent-review": "bin/agent-review" } }, "sha512-bjNh7fvxLxSEKIjK2kSVwhpGlPv+236dX7rPzoXL/yY+b9HeeU3hLopibWo1jdx1DU0qvS6gXNzOPbH/BOR+gA=="],
 
-    "@khoralabs/tkn": ["@khoralabs/tkn@0.1.0", "", { "dependencies": { "@tursodatabase/database": "^0.6.1", "typebox": "^1.3.3" }, "peerDependencies": { "typescript": "^5" }, "bin": { "tkn": "scripts/tkn.ts", "tokenize": "scripts/tokenize.ts" } }, "sha512-vP3s7VZz7QnFzdEP4JhwpJq841iV6TsLKquqMw/kWqbt3RRU97aZyaWRivamD12ADACut/eic2TLVVB0S/CEfw=="],
+    "@khoralabs/tkn": ["@khoralabs/tkn@0.2.0", "", { "dependencies": { "@tursodatabase/database": "^0.6.1", "typebox": "^1.3.3" }, "peerDependencies": { "typescript": "^5" }, "bin": { "tkn": "scripts/tkn.ts", "tokenize": "scripts/tokenize.ts" } }, "sha512-/yfTF6LqsdAtmiHoSbUERQpdsHPi7EbWAfvYG6GPjZd2ykmazBZJaYfe+3T4CTIZgVVBtLSlVwpZIPwpIRnzLw=="],
 
     "@mixmark-io/domino": ["@mixmark-io/domino@2.2.0", "", {}, "sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw=="],
 
