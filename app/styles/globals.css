@@ -126,3 +126,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+/** Soft edge fade for capped overflow-y scroll regions (runs list, pattern neighbors, tags). */
+@utility scroll-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 0.75rem,
+    #000 calc(100% - 0.75rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 0.75rem,
+    #000 calc(100% - 0.75rem),
+    transparent
+  );
+}

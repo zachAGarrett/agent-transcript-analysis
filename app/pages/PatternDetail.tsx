@@ -240,7 +240,7 @@ function NeighborColumn({
           {group.count ?? 0} links · {number(group.total ?? 0)} weight
         </small>
       </div>
-      <div className="scroll-fade h-40 overflow-y-auto">
+      <div className="scroll-fade max-h-40 overflow-y-auto">
         <div className="flex flex-col gap-0.5 pr-1">
           {group.rows.length ? (
             group.rows.map((row) => (
