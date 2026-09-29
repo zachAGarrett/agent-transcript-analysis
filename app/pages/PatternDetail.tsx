@@ -129,7 +129,7 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <code className="bg-muted max-w-full rounded-md px-2 py-1 font-mono text-[11px]" />
+                      <code className="bg-muted inline-block max-w-full truncate rounded-md px-2 py-1 font-mono text-[11px]" />
                     }
                   >
                     {encodingShort}
@@ -157,7 +157,7 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-3">
-                    <div className="scroll-fade h-40 overflow-y-auto">
+                    <div className="scroll-fade max-h-40 overflow-y-auto">
                       <div className="space-y-3 pr-1">
                         {steps.map((step, i) => (
                           <div key={step.full}>
