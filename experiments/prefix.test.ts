@@ -37,4 +37,27 @@ describe("predictNextPatterns", () => {
       lattice.close();
     }
   });
+
+  test("includes prefix length equal to maxPrefix when a next symbol exists", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-prefix-max-"));
+    dirs.push(dir);
+    const lattice = new Lattice({ filename: join(dir, "lattice.db") });
+    try {
+      const pipeline = new ExperimentPipeline(lattice);
+      const symbols = ["A|", "B|", "C|", "D|"];
+      for (let i = 0; i < 3; i++) {
+        await pipeline.processOne({ id: `t${i}`, symbols });
+      }
+      lattice.getTopTokens(1);
+
+      const { predictions } = predictNextPatterns(lattice, pipeline, [{ id: "h0", symbols }], {
+        maxPrefix: 3,
+        topK: 5,
+      });
+      expect(predictions.some((p) => p.prefixLen === 3)).toBe(true);
+      expect(Math.max(...predictions.map((p) => p.prefixLen))).toBe(3);
+    } finally {
+      lattice.close();
+    }
+  });
 });

@@ -103,8 +103,8 @@ export async function runJob(
         const latencyMs = performance.now() - t0;
         traces.push(traceFromDecode(sequence, sessionIdOf(sequence), result, latencyMs));
       }
-      metrics = buildDecodeSummary(traces, compiled.patternCount).metrics;
       const summary = buildDecodeSummary(traces, compiled.patternCount);
+      metrics = summary.metrics;
       decodesPath = await writeDecodesJsonl(dirAbs, traces);
       decodeSummaryPath = await writeDecodeSummary(dirAbs, summary);
       console.log(

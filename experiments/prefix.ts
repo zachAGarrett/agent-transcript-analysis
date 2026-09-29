@@ -38,8 +38,8 @@ export function predictNextPatterns(
   const predictions: PrefixPrediction[] = [];
 
   for (const sequence of sequences) {
-    const n = Math.min(sequence.symbols.length, maxPrefix);
-    for (let len = 1; len < n; len++) {
+    const maxLen = Math.min(maxPrefix, sequence.symbols.length - 1);
+    for (let len = 1; len <= maxLen; len++) {
       const prefix: Sequence = {
         id: `${sequence.id}@${len}`,
         symbols: sequence.symbols.slice(0, len),
