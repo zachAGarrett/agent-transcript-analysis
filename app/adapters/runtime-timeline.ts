@@ -31,39 +31,50 @@ export type TimelineFrame = {
 /** Top-k for timeline predictive accuracy (matches transition-graph next slots). */
 export const TIMELINE_HIT_K = 8;
 
+/** Rolling window (prediction steps) for timeline hit-rate series. */
+export const TIMELINE_ACCURACY_WINDOW = 32;
+
 export type TimelineAccuracyPoint = {
   i: number;
   index: number;
-  hit1Cum: number;
-  hitKCum: number;
+  /** Rolling hit@1 over the last up-to-window scored predictions. */
+  hit1: number;
+  /** Rolling hit@k over the last up-to-window scored predictions. */
+  hitK: number;
+  /** Number of scored predictions in the window at this point. */
+  window: number;
 };
 
 /**
- * Cumulative hit@1 / hit@k of frame[i].next vs the next frame's last decoded token.
- * One point per frame; the last frame carries forward the prior cumulative (no new eval).
+ * Rolling hit@1 / hit@k of frame[i].next vs the next frame's last decoded token.
+ * One point per frame; after the last scored step the window rate is carried forward.
  */
-export function accuracySeries(frames: TimelineFrame[]): TimelineAccuracyPoint[] {
+export function accuracySeries(
+  frames: TimelineFrame[],
+  windowSize = TIMELINE_ACCURACY_WINDOW,
+): TimelineAccuracyPoint[] {
+  const window = Math.max(1, windowSize);
+  const outcomes: { hit1: boolean; hitK: boolean }[] = [];
   const out: TimelineAccuracyPoint[] = [];
-  let hit1 = 0;
-  let hitK = 0;
-  let n = 0;
   for (let i = 0; i < frames.length; i++) {
     const pred = frames[i];
     const nextFrame = frames[i + 1];
     if (pred && nextFrame) {
       const actual = nextFrame.steps.at(-1)?.token;
-      n += 1;
-      if (actual) {
-        const ranked = pred.next.slice(0, TIMELINE_HIT_K).map((e) => e.pattern);
-        if (ranked[0] === actual) hit1 += 1;
-        if (ranked.includes(actual)) hitK += 1;
-      }
+      const ranked = pred.next.slice(0, TIMELINE_HIT_K).map((e) => e.pattern);
+      outcomes.push({
+        hit1: Boolean(actual && ranked[0] === actual),
+        hitK: Boolean(actual && ranked.includes(actual)),
+      });
     }
+    const slice = outcomes.slice(-window);
+    const n = slice.length;
     out.push({
       i,
       index: pred?.index ?? i,
-      hit1Cum: n > 0 ? hit1 / n : 0,
-      hitKCum: n > 0 ? hitK / n : 0,
+      hit1: n > 0 ? slice.filter((o) => o.hit1).length / n : 0,
+      hitK: n > 0 ? slice.filter((o) => o.hitK).length / n : 0,
+      window: n,
     });
   }
   return out;

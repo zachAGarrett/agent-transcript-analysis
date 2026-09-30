@@ -31,7 +31,7 @@ function frame(
 }
 
 describe("accuracySeries", () => {
-  test("cumulative hit@1 and hit@k against next frame tip token", () => {
+  test("rolling hit@1 and hit@k against next frame tip token", () => {
     const frames: TimelineFrame[] = [
       frame(0, "A", [
         { pattern: "B", weight: 1, prob: 1 },
@@ -44,20 +44,23 @@ describe("accuracySeries", () => {
       frame(2, "C", [{ pattern: "D", weight: 1, prob: 1 }]),
       frame(3, "D", []),
     ];
-    const series = accuracySeries(frames);
+    const series = accuracySeries(frames, 2);
     expect(series).toHaveLength(4);
-    // 0→1: B is top-1 → hit1=1, hitK=1
-    expect(series[0]).toMatchObject({ hit1Cum: 1, hitKCum: 1 });
-    // 1→2: C is in top-k but not top-1 → hit1=1/2, hitK=2/2
-    expect(series[1]?.hit1Cum).toBeCloseTo(0.5);
-    expect(series[1]?.hitKCum).toBeCloseTo(1);
-    // 2→3: D is top-1 → hit1=2/3, hitK=3/3
-    expect(series[2]?.hit1Cum).toBeCloseTo(2 / 3);
-    expect(series[2]?.hitKCum).toBeCloseTo(1);
+    // 0→1: B is top-1 → window [hit]
+    expect(series[0]).toMatchObject({ hit1: 1, hitK: 1, window: 1 });
+    // 1→2: C in top-k not top-1 → window [hit, miss@1]
+    expect(series[1]?.hit1).toBeCloseTo(0.5);
+    expect(series[1]?.hitK).toBeCloseTo(1);
+    expect(series[1]?.window).toBe(2);
+    // 2→3: D top-1 → window [miss@1, hit] (size 2)
+    expect(series[2]?.hit1).toBeCloseTo(0.5);
+    expect(series[2]?.hitK).toBeCloseTo(1);
+    expect(series[2]?.window).toBe(2);
     // last frame carries forward (no new prediction)
     expect(series[3]).toMatchObject({
-      hit1Cum: series[2]?.hit1Cum,
-      hitKCum: series[2]?.hitKCum,
+      hit1: series[2]?.hit1,
+      hitK: series[2]?.hitK,
+      window: 2,
     });
   });
 });

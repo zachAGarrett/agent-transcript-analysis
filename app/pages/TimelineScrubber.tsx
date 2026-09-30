@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import {
   accuracySeries,
+  TIMELINE_ACCURACY_WINDOW,
   TIMELINE_HIT_K,
   type TimelineFrame,
 } from "@/app/adapters/runtime-timeline";
@@ -31,12 +32,12 @@ const lengthConfig = {
 } satisfies ChartConfig;
 
 const accuracyConfig = {
-  hit1Cum: {
-    label: "Hit@1 (cumulative)",
+  hit1: {
+    label: `Hit@1 (last ${TIMELINE_ACCURACY_WINDOW})`,
     color: "var(--chart-1)",
   },
-  hitKCum: {
-    label: `Hit@${TIMELINE_HIT_K} (cumulative)`,
+  hitK: {
+    label: `Hit@${TIMELINE_HIT_K} (last ${TIMELINE_ACCURACY_WINDOW})`,
     color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
@@ -250,10 +251,10 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                       <ChartTooltipContent
                         labelFormatter={(_, payload) => {
                           const row = payload?.[0]?.payload as
-                            | { index?: number; hit1Cum?: number; hitKCum?: number }
+                            | { index?: number; hit1?: number; hitK?: number; window?: number }
                             | undefined;
                           return row
-                            ? `#${row.index} · hit@1 ${number(row.hit1Cum ?? 0)} · hit@${TIMELINE_HIT_K} ${number(row.hitKCum ?? 0)}`
+                            ? `#${row.index} · hit@1 ${number(row.hit1 ?? 0)} · hit@${TIMELINE_HIT_K} ${number(row.hitK ?? 0)} · n=${row.window ?? 0}`
                             : "Predictive accuracy";
                         }}
                       />
@@ -261,16 +262,16 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                   />
                   <Line
                     type="monotone"
-                    dataKey="hit1Cum"
-                    stroke="var(--color-hit1Cum)"
+                    dataKey="hit1"
+                    stroke="var(--color-hit1)"
                     strokeWidth={2}
                     dot={false}
                     isAnimationActive={false}
                   />
                   <Line
                     type="monotone"
-                    dataKey="hitKCum"
-                    stroke="var(--color-hitKCum)"
+                    dataKey="hitK"
+                    stroke="var(--color-hitK)"
                     strokeWidth={2}
                     strokeDasharray="4 2"
                     dot={false}
@@ -335,9 +336,12 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                 <Badge variant="outline">score {number(frame.score)}</Badge>
                 {chart === "accuracy" && accuracyAtCursor ? (
                   <>
-                    <Badge variant="outline">hit@1 {number(accuracyAtCursor.hit1Cum)}</Badge>
+                    <Badge variant="outline">hit@1 {number(accuracyAtCursor.hit1)}</Badge>
                     <Badge variant="outline">
-                      hit@{TIMELINE_HIT_K} {number(accuracyAtCursor.hitKCum)}
+                      hit@{TIMELINE_HIT_K} {number(accuracyAtCursor.hitK)}
+                    </Badge>
+                    <Badge variant="outline">
+                      window {accuracyAtCursor.window}/{TIMELINE_ACCURACY_WINDOW}
                     </Badge>
                   </>
                 ) : null}
