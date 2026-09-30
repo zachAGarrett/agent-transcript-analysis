@@ -2,6 +2,8 @@ import {
   createFeedState,
   createLZSequencer,
   type FeedState,
+  feedInput,
+  flushFeedState,
   type ICompiledLattice,
   type ILattice,
   type ISequencer,
@@ -11,10 +13,8 @@ import {
   Unbounded,
 } from "@khoralabs/tkn";
 
-/** Default segment count before commitFeedBatch (online-friendly; tkn feed uses 500). */
+/** Default segment count before flush (online-friendly; tkn auto-flush uses 500). */
 export const DEFAULT_COMMIT_BATCH_SIZE = 10;
-
-type WeightedPair = [string, string, number?];
 
 function toSegment(output: SequencerOutput): LatticeSegment {
   return { key: output.key, sequence: output.sequence };
@@ -24,76 +24,21 @@ function transitionKey(from: string, to: string): string {
   return `${from}\0${to}`;
 }
 
-function recordTransition(
-  counts: Map<string, { from: string; to: string; count: number }>,
-  from: string,
-  to: string,
-): void {
-  const key = transitionKey(from, to);
-  const entry = counts.get(key);
-  if (entry) entry.count += 1;
-  else counts.set(key, { from, to, count: 1 });
-}
-
-function countsToPairs(
-  counts: Map<string, { from: string; to: string; count: number }>,
-): WeightedPair[] {
-  return [...counts.values()].map(({ from, to, count }) => [from, to, count]);
-}
-
-function shouldFlush(
-  pendingCount: number,
-  transitionCount: number,
-  commitBatchSize: number,
-  transitionBatchSize: number,
-): boolean {
-  return pendingCount >= commitBatchSize || transitionCount >= transitionBatchSize;
-}
-
-function flushFeedBatch(lattice: ILattice, state: FeedState, transitionBatchSize: number): void {
-  const pairs = countsToPairs(state.transitionCounts);
-  state.transitionCounts.clear();
-
-  if (pairs.length > transitionBatchSize) {
-    const segments = state.pendingSegments.splice(0);
-    for (let i = 0; i < pairs.length; i += transitionBatchSize) {
-      const pairBatch = pairs.slice(i, i + transitionBatchSize);
-      const segmentBatch = i === 0 ? segments : [];
-      lattice.commitFeedBatch(segmentBatch, pairBatch);
-    }
-    return;
-  }
-
-  lattice.commitFeedBatch(state.pendingSegments.splice(0), pairs);
-}
-
-function processOutputs(
-  lattice: ILattice,
-  outputs: SequencerOutput[],
-  state: FeedState,
-  commitBatchSize: number,
-  transitionBatchSize: number,
-): void {
+/**
+ * After sequencer.endSequence(), drain the final tip into FeedState.
+ * tkn 0.2.1 has no exported endFeedSequence helper.
+ */
+function absorbFinalOutputs(state: FeedState, outputs: SequencerOutput[]): void {
   for (const output of outputs) {
     const segment = toSegment(output);
     state.pendingSegments.push(segment);
-
     if (state.previousKey !== null) {
-      recordTransition(state.transitionCounts, state.previousKey, segment.key);
+      const key = transitionKey(state.previousKey, segment.key);
+      const entry = state.transitionCounts.get(key);
+      if (entry) entry.count += 1;
+      else state.transitionCounts.set(key, { from: state.previousKey, to: segment.key, count: 1 });
     }
-
     state.previousKey = segment.key;
-
-    if (
-      shouldFlush(
-        state.pendingSegments.length,
-        state.transitionCounts.size,
-        commitBatchSize,
-        transitionBatchSize,
-      )
-    ) {
-      flushFeedBatch(lattice, state, transitionBatchSize);
-    }
   }
 }
 
@@ -101,7 +46,7 @@ export type OnlineLearnerOptions = {
   sequencer?: ISequencer;
   /**
    * Flush segments/transitions to the lattice after this many pending segments
-   * (default 10). Hosts of the online runtime should set this for learn+decode lag.
+   * (default 10). Online forecast loops also call flush() explicitly each step.
    */
   commitBatchSize?: number;
   /** Transition map flush threshold when splitting large pair batches (default 1000). */
@@ -139,32 +84,30 @@ export class OnlineLearner {
   pushSymbol(symbol: string): void {
     if (this.ended) throw new Error("OnlineLearner: session already ended");
     if (symbol.length === 0) return;
-    this.sequencer.push(symbol);
-    processOutputs(
-      this.lattice,
-      this.sequencer.drainPending(),
-      this.feedState,
-      this.commitBatchSize,
-      this.transitionBatchSize,
-    );
+    feedInput(this.lattice, this.sequencer, symbol, this.feedState, this.transitionBatchSize);
+    if (this.feedState.pendingSegments.length >= this.commitBatchSize) {
+      this.flush();
+    }
   }
 
   /**
-   * Session-span boundary: flush sequencer, commit pending feed batch, clear transition cursor.
+   * Commit emitted segments/transitions without ending the LZ sequence.
+   * Call before compile/predict so getNext sees the latest completed edges.
+   */
+  flush(): void {
+    flushFeedState(this.lattice, this.feedState, this.transitionBatchSize);
+  }
+
+  /**
+   * Session-span boundary: flush sequencer tip, commit pending feed batch, clear cursor.
    * Single-session-per-run for v1 — do not push after this.
    */
   async endSession(): Promise<void> {
     if (this.ended) return;
     this.ended = true;
     await this.sequencer.endSequence();
-    processOutputs(
-      this.lattice,
-      this.sequencer.drainPending(),
-      this.feedState,
-      this.commitBatchSize,
-      this.transitionBatchSize,
-    );
-    flushFeedBatch(this.lattice, this.feedState, this.transitionBatchSize);
+    absorbFinalOutputs(this.feedState, this.sequencer.drainPending());
+    this.flush();
     this.feedState.previousKey = null;
   }
 

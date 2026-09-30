@@ -90,4 +90,41 @@ describe("OnlineLearner", () => {
       lattice.close();
     }
   });
+
+  test("flush makes emitted edges visible below commitBatchSize", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-learner-flush-"));
+    dirs.push(dir);
+    const lattice = new Lattice({ filename: join(dir, "lattice.db") });
+    const learner = new OnlineLearner(lattice, { commitBatchSize: 100 });
+    try {
+      learner.pushSymbol("A|");
+      learner.pushSymbol("B|");
+      learner.pushSymbol("C|");
+      expect(lattice.getNext("A|")).toEqual([]);
+      learner.flush();
+      expect(lattice.vocabulary()).toContain("A|");
+      expect(lattice.vocabulary()).toContain("B|");
+      expect(lattice.getNext("A|").some((e) => e.to === "B|")).toBe(true);
+    } finally {
+      lattice.close();
+    }
+  });
+
+  test("endSession ingests the unfinished final LZ tip", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-learner-end-"));
+    dirs.push(dir);
+    const lattice = new Lattice({ filename: join(dir, "lattice.db") });
+    const learner = new OnlineLearner(lattice, { commitBatchSize: 100 });
+    try {
+      learner.pushSymbol("A|");
+      learner.pushSymbol("B|");
+      learner.flush();
+      await learner.endSession();
+      expect(lattice.vocabulary()).toContain("A|");
+      expect(lattice.vocabulary()).toContain("B|");
+      expect(lattice.getNext("A|").some((e) => e.to === "B|")).toBe(true);
+    } finally {
+      lattice.close();
+    }
+  });
 });
