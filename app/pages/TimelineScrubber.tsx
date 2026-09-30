@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import {
   accuracySeries,
+  compressionSeries,
   TIMELINE_ACCURACY_WINDOW,
   TIMELINE_HIT_K,
   type TimelineFrame,
@@ -40,6 +41,17 @@ const accuracyConfig = {
     label: `Hit@${TIMELINE_HIT_K} (last ${TIMELINE_ACCURACY_WINDOW})`,
     color: "var(--chart-2)",
   },
+  coverage: {
+    label: `Coverage (last ${TIMELINE_ACCURACY_WINDOW})`,
+    color: "var(--chart-3)",
+  },
+} satisfies ChartConfig;
+
+const compressionConfig = {
+  reduction: {
+    label: "Compression reduction",
+    color: "var(--chart-1)",
+  },
 } satisfies ChartConfig;
 
 function lastPatternLength(steps: TimelineFrame["steps"]): number {
@@ -61,8 +73,9 @@ function TimelineXAxis({ max }: { max: number }) {
 }
 
 function chartTitle(chart: TimelineChartKind): string {
-  if (chart === "accuracy") return "Timeline accuracy";
+  if (chart === "accuracy") return "Next-source-symbol accuracy";
   if (chart === "length") return "Pattern length by step";
+  if (chart === "compression") return "Compression reduction";
   return "Decode timeline";
 }
 
@@ -124,6 +137,7 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
   );
 
   const accuracyData = useMemo(() => accuracySeries(frames ?? []), [frames]);
+  const compressionData = useMemo(() => compressionSeries(frames ?? []), [frames]);
 
   const prevToken = frame?.steps.at(-2)?.token;
   const currentToken = frame?.steps.at(-1)?.token;
@@ -140,6 +154,8 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
   };
 
   const accuracyAtCursor = accuracyData[cursor] ?? accuracyData.at(-1);
+  const firstAccuracy = accuracyData.find((p) => p.window > 0);
+  const compressionAtCursor = compressionData[cursor] ?? compressionData.at(-1);
 
   return (
     <section
@@ -251,11 +267,17 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                       <ChartTooltipContent
                         labelFormatter={(_, payload) => {
                           const row = payload?.[0]?.payload as
-                            | { index?: number; hit1?: number; hitK?: number; window?: number }
+                            | {
+                                index?: number;
+                                hit1?: number;
+                                hitK?: number;
+                                coverage?: number;
+                                window?: number;
+                              }
                             | undefined;
                           return row
-                            ? `#${row.index} · hit@1 ${number(row.hit1 ?? 0)} · hit@${TIMELINE_HIT_K} ${number(row.hitK ?? 0)} · n=${row.window ?? 0}`
-                            : "Predictive accuracy";
+                            ? `#${row.index} · hit@1 ${number(row.hit1 ?? 0)} · hit@${TIMELINE_HIT_K} ${number(row.hitK ?? 0)} · cov ${number(row.coverage ?? 0)} · n=${row.window ?? 0}`
+                            : "Next-source-symbol accuracy";
                         }}
                       />
                     }
@@ -277,6 +299,15 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                     dot={false}
                     isAnimationActive={false}
                   />
+                  <Line
+                    type="monotone"
+                    dataKey="coverage"
+                    stroke="var(--color-coverage)"
+                    strokeWidth={1.5}
+                    strokeDasharray="2 2"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
                   <ReferenceLine
                     x={cursor}
                     stroke="var(--primary)"
@@ -287,8 +318,66 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
               </ChartContainer>
             ) : null}
 
-            {/* Track matches plot gutters when a chart is above; room for step buttons always. */}
-            <div className="flex items-center gap-2 w-full">
+            {chart === "compression" ? (
+              <ChartContainer
+                config={compressionConfig}
+                className="aspect-auto h-32 w-full"
+                initialDimension={{ width: 640, height: 128 }}
+              >
+                <LineChart
+                  data={compressionData}
+                  onClick={(state) => {
+                    const idx = state?.activeTooltipIndex;
+                    if (typeof idx === "number") setCursor(idx);
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <TimelineXAxis max={max} />
+                  <YAxis
+                    domain={[0, 1]}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => number(Number(v))}
+                    className="text-[10px]"
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        labelFormatter={(_, payload) => {
+                          const row = payload?.[0]?.payload as
+                            | {
+                                index?: number;
+                                reduction?: number;
+                                meanSpan?: number;
+                              }
+                            | undefined;
+                          return row
+                            ? `#${row.index} · reduction ${number(row.reduction ?? 0)} · mean span ${number(row.meanSpan ?? 0)}`
+                            : "Compression reduction";
+                        }}
+                      />
+                    }
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="reduction"
+                    stroke="var(--color-reduction)"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <ReferenceLine
+                    x={cursor}
+                    stroke="var(--primary)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 2"
+                  />
+                </LineChart>
+              </ChartContainer>
+            ) : null}
+
+            <div className="flex w-full items-center gap-2">
               <Button
                 type="button"
                 size="icon-sm"
@@ -331,6 +420,10 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                 </Badge>
                 <code className="truncate font-mono text-xs">{frame.symbol}</code>
                 <Badge variant="outline">len {frame.symbolCount}</Badge>
+                <Badge variant="outline">
+                  steps {frame.decodedStepCount}
+                  {frame.decodedStepCountApproximate ? "~" : ""}
+                </Badge>
                 <Badge variant="outline">cov {number(frame.multiSymbolCoverage)}</Badge>
                 <Badge variant="outline">atomic {number(frame.atomicFallbackRate)}</Badge>
                 <Badge variant="outline">score {number(frame.score)}</Badge>
@@ -340,10 +433,39 @@ export function TimelineScrubber({ runId, chart, onOpenPattern }: Props) {
                     <Badge variant="outline">
                       hit@{TIMELINE_HIT_K} {number(accuracyAtCursor.hitK)}
                     </Badge>
+                    <Badge variant="outline">cov {number(accuracyAtCursor.coverage)}</Badge>
                     <Badge variant="outline">
                       window {accuracyAtCursor.window}/{TIMELINE_ACCURACY_WINDOW}
                     </Badge>
+                    {firstAccuracy && accuracyAtCursor.window > 0 ? (
+                      <Badge variant="outline">
+                        Δhit@1 {number(accuracyAtCursor.hit1 - firstAccuracy.hit1)}
+                      </Badge>
+                    ) : null}
                   </>
+                ) : null}
+                {chart === "compression" && compressionAtCursor ? (
+                  <>
+                    <Badge variant="outline">
+                      reduction {number(compressionAtCursor.reduction)}
+                    </Badge>
+                    <Badge variant="outline">
+                      mean span {number(compressionAtCursor.meanSpan)}
+                    </Badge>
+                  </>
+                ) : null}
+                {frame.outcome ? (
+                  <Badge variant={frame.outcome.hit1 ? "default" : "outline"}>
+                    prior{" "}
+                    {frame.outcome.hit1
+                      ? "hit@1"
+                      : frame.outcome.hitK
+                        ? `hit@${frame.outcome.rank}`
+                        : frame.outcome.covered
+                          ? "miss"
+                          : "uncovered"}{" "}
+                    → {frame.outcome.actualSymbol}
+                  </Badge>
                 ) : null}
                 {!frame.complete ? <Badge variant="destructive">incomplete</Badge> : null}
               </div>

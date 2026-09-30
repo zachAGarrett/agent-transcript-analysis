@@ -17,6 +17,7 @@ function PatternButton({
   token,
   empty,
   score,
+  subtitle,
   ...props
 }: Omit<
   React.ComponentProps<typeof Button>,
@@ -25,6 +26,7 @@ function PatternButton({
   token?: string;
   empty?: boolean;
   score?: number;
+  subtitle?: string;
 }) {
   return (
     <Button
@@ -38,8 +40,13 @@ function PatternButton({
       }`}
       {...props}
     >
-      <span className="min-w-0 flex-1 truncate text-left">
-        {empty || !token ? "—" : patternLabel(token)}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+        <span className="truncate">{empty || !token ? "—" : patternLabel(token)}</span>
+        {subtitle ? (
+          <span className="text-muted-foreground truncate text-[10px] font-sans normal-case">
+            {subtitle}
+          </span>
+        ) : null}
       </span>
       {score !== undefined ? (
         <Badge variant="secondary" className="shrink-0 tabular-nums">
@@ -147,6 +154,16 @@ export function PatternTransitionGraph({
               variant="outline"
               empty={!slot}
               score={slot?.prob}
+              subtitle={
+                slot
+                  ? [
+                      slot.symbol && slot.symbol !== slot.pattern ? `→ ${slot.symbol}` : null,
+                      slot.source,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || undefined
+                  : undefined
+              }
               onClick={() => click?.(slot?.pattern)}
             />
           </div>

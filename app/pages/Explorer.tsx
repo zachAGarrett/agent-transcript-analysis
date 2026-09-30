@@ -548,6 +548,12 @@ export function Explorer() {
           label: morphismLabel("show_timeline_length"),
           index: LENGTH_CRUMB_INDEX,
         });
+      } else if (tipState.timelineChart === "compression") {
+        crumbs.push({
+          name: "show_timeline_compression",
+          label: morphismLabel("show_timeline_compression"),
+          index: LENGTH_CRUMB_INDEX,
+        });
       }
       return {
         crumbs,
@@ -580,7 +586,8 @@ export function Explorer() {
         name === "close_timeline_scrubber" ||
         name === "show_timeline_graph" ||
         name === "show_timeline_accuracy" ||
-        name === "show_timeline_length"
+        name === "show_timeline_length" ||
+        name === "show_timeline_compression"
       );
     }
     return name !== "open_timeline_scrubber";

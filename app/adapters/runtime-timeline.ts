@@ -1,6 +1,8 @@
 import { createReadStream, realpathSync } from "node:fs";
 import { join, sep } from "node:path";
 import { createInterface } from "node:readline";
+import type { PredictionOutcome, RankedNext, ScorerProvenance } from "@/runtime/predictor";
+import { PREDICTION_TOP_K, PREDICTION_WINDOW } from "@/runtime/predictor";
 
 export type TimelineStep = {
   token: string;
@@ -12,8 +14,10 @@ export type TimelineStep = {
 
 export type TimelineNext = {
   pattern: string;
+  symbol?: string;
   weight: number;
   prob: number;
+  source?: ScorerProvenance;
 };
 
 export type TimelineFrame = {
@@ -22,62 +26,90 @@ export type TimelineFrame = {
   symbolCount: number;
   multiSymbolCoverage: number;
   atomicFallbackRate: number;
+  /** Full decoded step count; may equal steps.length for legacy rows. */
+  decodedStepCount: number;
+  /** True when decodedStepCount was inferred from the truncated steps tail. */
+  decodedStepCountApproximate: boolean;
   score: number;
   complete: boolean;
   steps: TimelineStep[];
   next: TimelineNext[];
+  /** Outcome of the previous forecast vs this frame's source symbol. */
+  outcome?: PredictionOutcome;
 };
 
 /** Top-k for timeline predictive accuracy (matches transition-graph next slots). */
-export const TIMELINE_HIT_K = 8;
+export const TIMELINE_HIT_K = PREDICTION_TOP_K;
 
 /** Rolling window (prediction steps) for timeline hit-rate series. */
-export const TIMELINE_ACCURACY_WINDOW = 32;
+export const TIMELINE_ACCURACY_WINDOW = PREDICTION_WINDOW;
 
 export type TimelineAccuracyPoint = {
   i: number;
   index: number;
-  /** Rolling hit@1 over the last up-to-window scored predictions. */
   hit1: number;
-  /** Rolling hit@k over the last up-to-window scored predictions. */
   hitK: number;
-  /** Number of scored predictions in the window at this point. */
+  mrr: number;
+  coverage: number;
   window: number;
 };
 
 /**
- * Rolling hit@1 / hit@k of frame[i].next vs the next frame's last decoded token.
- * One point per frame; after the last scored step the window rate is carried forward.
+ * Rolling hit@1 / hit@k / MRR / coverage from persisted prequential outcomes.
+ * No frame lookahead — outcomes already score the prior forecast against this symbol.
  */
 export function accuracySeries(
   frames: TimelineFrame[],
   windowSize = TIMELINE_ACCURACY_WINDOW,
 ): TimelineAccuracyPoint[] {
   const window = Math.max(1, windowSize);
-  const outcomes: { hit1: boolean; hitK: boolean }[] = [];
+  const outcomes: PredictionOutcome[] = [];
   const out: TimelineAccuracyPoint[] = [];
   for (let i = 0; i < frames.length; i++) {
-    const pred = frames[i];
-    const nextFrame = frames[i + 1];
-    if (pred && nextFrame) {
-      const actual = nextFrame.steps.at(-1)?.token;
-      const ranked = pred.next.slice(0, TIMELINE_HIT_K).map((e) => e.pattern);
-      outcomes.push({
-        hit1: Boolean(actual && ranked[0] === actual),
-        hitK: Boolean(actual && ranked.includes(actual)),
-      });
-    }
+    const frame = frames[i];
+    if (frame?.outcome) outcomes.push(frame.outcome);
     const slice = outcomes.slice(-window);
     const n = slice.length;
     out.push({
       i,
-      index: pred?.index ?? i,
+      index: frame?.index ?? i,
       hit1: n > 0 ? slice.filter((o) => o.hit1).length / n : 0,
       hitK: n > 0 ? slice.filter((o) => o.hitK).length / n : 0,
+      mrr: n > 0 ? slice.reduce((s, o) => s + o.reciprocalRank, 0) / n : 0,
+      coverage: n > 0 ? slice.filter((o) => o.covered).length / n : 0,
       window: n,
     });
   }
   return out;
+}
+
+export type TimelineCompressionPoint = {
+  i: number;
+  index: number;
+  /** 1 − decodedStepCount / symbolCount */
+  reduction: number;
+  meanSpan: number;
+  multiSymbolCoverage: number;
+  atomicFallbackRate: number;
+  approximate: boolean;
+};
+
+/** Compression reduction over timeline position. */
+export function compressionSeries(frames: TimelineFrame[]): TimelineCompressionPoint[] {
+  return frames.map((f, i) => {
+    const symbolCount = Math.max(0, f.symbolCount);
+    const steps = Math.max(0, f.decodedStepCount);
+    const reduction = symbolCount === 0 ? 0 : 1 - steps / symbolCount;
+    return {
+      i,
+      index: f.index,
+      reduction: Math.max(0, Math.min(1, reduction)),
+      meanSpan: steps === 0 ? 0 : symbolCount / steps,
+      multiSymbolCoverage: f.multiSymbolCoverage,
+      atomicFallbackRate: f.atomicFallbackRate,
+      approximate: f.decodedStepCountApproximate,
+    };
+  });
 }
 
 const MAX_FRAMES = 20_000;
@@ -129,6 +161,35 @@ function tailSteps(
   return slice.map(mapStep);
 }
 
+function mapNext(raw: unknown): TimelineNext[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((e) => {
+    const row = e as RankedNext & { pattern: string; weight: number; prob: number };
+    return {
+      pattern: String(row.pattern ?? ""),
+      symbol: row.symbol !== undefined ? String(row.symbol) : undefined,
+      weight: Number(row.weight ?? 0),
+      prob: Number(row.prob ?? 0),
+      source: row.source,
+    };
+  });
+}
+
+function mapOutcome(raw: unknown): PredictionOutcome | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.actualSymbol !== "string") return undefined;
+  return {
+    actualSymbol: o.actualSymbol,
+    covered: Boolean(o.covered),
+    rank: typeof o.rank === "number" ? o.rank : null,
+    hit1: Boolean(o.hit1),
+    hitK: Boolean(o.hitK),
+    reciprocalRank: Number(o.reciprocalRank ?? 0),
+    softPrefixHit: Boolean(o.softPrefixHit),
+  };
+}
+
 /** Accept compact (v2) or legacy fat snapshot decoded rows. */
 function frameFromRow(row: Record<string, unknown>): TimelineFrame | null {
   if (row.kind !== "decoded") return null;
@@ -149,42 +210,57 @@ function frameFromRow(row: Record<string, unknown>): TimelineFrame | null {
         };
         multiSymbolCoverage?: number;
         atomicFallbackRate?: number;
+        decodedStepCount?: number;
         next?: TimelineNext[];
       }
     | undefined;
 
   if (snap) {
+    const steps = tailSteps(snap.result?.steps ?? []);
+    const decodedStepCount =
+      typeof snap.decodedStepCount === "number"
+        ? snap.decodedStepCount
+        : (snap.result?.steps?.length ?? steps.length);
+    const approximate = typeof snap.decodedStepCount !== "number";
     return {
       index: Number(row.index),
       symbol: String(row.symbol ?? ""),
       symbolCount: snap.symbols?.length ?? 0,
       multiSymbolCoverage: snap.multiSymbolCoverage ?? 0,
       atomicFallbackRate: snap.atomicFallbackRate ?? 0,
+      decodedStepCount,
+      decodedStepCountApproximate: approximate,
       score: snap.result?.score ?? 0,
       complete: snap.result?.complete ?? false,
-      steps: tailSteps(snap.result?.steps ?? []),
-      next: snap.next ?? [],
+      steps,
+      next: mapNext(snap.next ?? []),
+      outcome: mapOutcome(row.outcome),
     };
   }
 
+  const steps = tailSteps(
+    (row.steps as Array<{
+      token: string;
+      start: number;
+      end: number;
+      emissionScore: number;
+      transitionScore: number;
+    }>) ?? [],
+  );
+  const hasCount = typeof row.decodedStepCount === "number";
   return {
     index: Number(row.index),
     symbol: String(row.symbol ?? ""),
     symbolCount: Number(row.symbolCount ?? 0),
     multiSymbolCoverage: Number(row.multiSymbolCoverage ?? 0),
     atomicFallbackRate: Number(row.atomicFallbackRate ?? 0),
+    decodedStepCount: hasCount ? Number(row.decodedStepCount) : steps.length,
+    decodedStepCountApproximate: !hasCount,
     score: Number(row.score ?? 0),
     complete: Boolean(row.complete),
-    steps: tailSteps(
-      (row.steps as Array<{
-        token: string;
-        start: number;
-        end: number;
-        emissionScore: number;
-        transitionScore: number;
-      }>) ?? [],
-    ),
-    next: (row.next as TimelineNext[]) ?? [],
+    steps,
+    next: mapNext(row.next),
+    outcome: mapOutcome(row.outcome),
   };
 }
 
@@ -234,19 +310,6 @@ export async function readRuntimeTimeline(
 
   return {
     frames,
-    warning: truncated
-      ? `Timeline truncated to ${MAX_FRAMES} frames.`
-      : frames.length === 0
-        ? "events.jsonl has no decoded frames."
-        : undefined,
+    warning: truncated ? `Timeline truncated to ${MAX_FRAMES} frames.` : undefined,
   };
-}
-
-export async function runHasEvents(root: string, runId: string): Promise<boolean> {
-  try {
-    const dir = assertSafeRunDir(root, runId);
-    return await Bun.file(join(dir, "events.jsonl")).exists();
-  } catch {
-    return false;
-  }
 }

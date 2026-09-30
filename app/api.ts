@@ -113,7 +113,7 @@ export async function handleApi(request: Request): Promise<Response> {
         selection?: SelectionContext;
         detailRequested?: boolean;
         timelineRequested?: boolean;
-        timelineChart?: "graph" | "length" | "accuracy";
+        timelineChart?: "graph" | "length" | "accuracy" | "compression";
         tip?: string;
         runHasEvents?: boolean;
       };

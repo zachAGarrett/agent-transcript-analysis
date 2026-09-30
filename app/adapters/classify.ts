@@ -78,6 +78,13 @@ export function rulesPick(question: string, legal: string[]): string | null {
     return Morphism.showTimelineLength;
   }
 
+  if (
+    has(legal, Morphism.showTimelineCompression) &&
+    /\b(compression|compression rate|reduction)\b/.test(q)
+  ) {
+    return Morphism.showTimelineCompression;
+  }
+
   const loads = legal.filter((n) => n.startsWith("load_"));
   if (loads.length > 1) {
     if (
