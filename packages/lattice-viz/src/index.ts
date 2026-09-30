@@ -39,7 +39,6 @@ export type {
   TopKByKind,
 } from "./ids";
 export {
-  EffectPath,
   Grain,
   GrainValues,
   IrMeasure,

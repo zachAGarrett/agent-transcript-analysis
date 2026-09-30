@@ -1,8 +1,14 @@
-import type { CompositionCertificate } from "@workstream/morphism-space";
+import type { Arrow } from "@very-coffee/statespace/morphisms";
+import { type CompositionCertificate, composeArrows, objectOf } from "@workstream/morphism-space";
 import { Morphism, Source, Tip } from "./ids";
-import { classifyPathState } from "./morphisms/objects";
+import { tipObjects } from "./morphisms/objects";
 import { clearSessionTip } from "./morphisms/registry";
-import { applyPath, enabledNames, SESSION_MORPHISMS } from "./morphisms/transitions";
+import {
+  applyPath,
+  enabledNames,
+  pathMorphismSpace,
+  SESSION_MORPHISMS,
+} from "./morphisms/transitions";
 import { initialPathState, type PathState } from "./path-state";
 import type { PathPlan, PathStep } from "./types";
 
@@ -11,72 +17,112 @@ export type CertifiedPathResult = {
   certificate: CompositionCertificate;
 };
 
+function tipKey(state: PathState): string | undefined {
+  return objectOf(state, tipObjects)?.key;
+}
+
+function failCertificate(
+  regions: string[],
+  stepNames: string[],
+  error: string,
+): CompositionCertificate {
+  return {
+    ok: false,
+    source: regions[0],
+    target: regions[regions.length - 1],
+    intermediates: regions.length > 2 ? regions.slice(1, -1) : [],
+    steps: stepNames,
+    error,
+  };
+}
+
 /**
- * Replay construction/display steps from initial, certifying each hop via
- * semantic region classification. Session morphisms are rejected.
+ * Replay construction/display steps from initial, witnessing tip-level arrows
+ * and certifying via `composeArrows`. Session morphisms are rejected.
  * Drill carries lengthKey in step params — no manufactured selection tip.
  */
 export function composeCertifiedPath(steps: PathStep[]): CertifiedPathResult {
   let state = initialPathState;
-  const regions: string[] = [];
-  const start = classifyPathState(state)?.key;
-  if (start) regions.push(start);
+  const startTip = tipKey(state) ?? Tip.query;
+
+  if (steps.length === 0) {
+    return {
+      state,
+      certificate: {
+        ok: true,
+        source: startTip,
+        target: startTip,
+        intermediates: [],
+        steps: [],
+      },
+    };
+  }
+
+  const tips: string[] = [startTip];
   const stepNames: string[] = [];
+  const witnessed: Arrow<PathState>[] = [];
 
   for (const step of steps) {
     if (SESSION_MORPHISMS.has(step.name)) {
       return {
         state,
-        certificate: {
-          ok: false,
-          source: regions[0],
-          intermediates: regions.slice(1),
-          steps: stepNames,
-          error: `Session morphism not allowed in plan: ${step.name}`,
-        },
+        certificate: failCertificate(
+          tips,
+          stepNames,
+          `Session morphism not allowed in plan: ${step.name}`,
+        ),
       };
     }
     const legal = new Set(enabledNames(state, step.params));
     if (!legal.has(step.name)) {
       return {
         state,
-        certificate: {
-          ok: false,
-          source: regions[0],
-          target: regions[regions.length - 1],
-          intermediates: regions.slice(1, -1),
-          steps: stepNames,
-          error: `Illegal step: ${step.name}`,
-        },
+        certificate: failCertificate(tips, stepNames, `Illegal step: ${step.name}`),
+      };
+    }
+    const sourceTip = tipKey(state);
+    if (!sourceTip) {
+      return {
+        state,
+        certificate: failCertificate(tips, stepNames, "Unclassified tip before step."),
       };
     }
     const next = applyPath(state, step.name, step.params);
     if (!next.ok) {
       return {
         state,
-        certificate: {
-          ok: false,
-          source: regions[0],
-          target: regions[regions.length - 1],
-          intermediates: regions.slice(1, -1),
-          steps: stepNames,
-          error: next.error,
-        },
+        certificate: failCertificate(tips, stepNames, next.error),
       };
     }
+    const targetTip = tipKey(next.state);
+    if (!targetTip) {
+      return {
+        state: next.state,
+        certificate: failCertificate(tips, stepNames, "Unclassified tip after step."),
+      };
+    }
+    const arrow = pathMorphismSpace.arrowInstance(step.name, sourceTip, targetTip);
+    if (!arrow) {
+      return {
+        state: next.state,
+        certificate: failCertificate(
+          tips,
+          stepNames,
+          `No sealed arrow for ${step.name}: ${sourceTip} → ${targetTip}`,
+        ),
+      };
+    }
+    witnessed.push(arrow);
     stepNames.push(step.name);
     state = next.state;
-    const after = classifyPathState(state)?.key;
-    if (after) regions.push(after);
+    tips.push(targetTip);
   }
 
+  const { certificate } = composeArrows(witnessed);
   return {
     state,
     certificate: {
-      ok: true,
-      source: regions[0],
-      target: regions[regions.length - 1],
-      intermediates: regions.slice(1, -1),
+      ...certificate,
       steps: stepNames,
     },
   };

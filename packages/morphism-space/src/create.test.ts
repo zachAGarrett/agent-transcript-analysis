@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Schema } from "@statespace/core";
-import { createMorphismSpace, defineMorphisms } from "./index";
+import type { Schema } from "@very-coffee/statespace";
+import { createMorphismSpace, defineMorphisms, defineObjects } from "./index";
 
 type Counter = {
   tip: "idle" | "ready" | "done";
@@ -20,7 +20,15 @@ const shape = {
     value: { type: "number" },
     steps: { type: "array", items: { type: "string" } },
   },
+  required: ["tip", "value", "steps"],
+  additionalProperties: false,
 } as unknown as Schema<Counter>;
+
+const objects = defineObjects<Counter>()([
+  { key: "idle", contains: (s) => s.tip === "idle" },
+  { key: "ready", contains: (s) => s.tip === "ready" },
+  { key: "done", contains: (s) => s.tip === "done" },
+]);
 
 const defs = defineMorphisms<Counter, Ctx, InterpretCtx, Step>()([
   {
@@ -32,7 +40,7 @@ const defs = defineMorphisms<Counter, Ctx, InterpretCtx, Step>()([
       not_for: "Already armed",
       examples: ["arm"],
     },
-    contract: { domain: "idle", codomain: "ready" },
+    contract: { domain: "idle", codomain: "ready", source: "idle", target: "ready" },
     available: { when: (s) => s.tip === "idle", otherwise: "Must be idle." },
     effect: (s) => ({ ...s, tip: "ready", steps: [...s.steps, "arm"] }),
     interpret: (ctx, step) => ({ log: [...ctx.log, step.name] }),
@@ -46,11 +54,16 @@ const defs = defineMorphisms<Counter, Ctx, InterpretCtx, Step>()([
       not_for: "Not ready",
       examples: ["bump"],
     },
-    contract: { domain: "ready", codomain: "ready", reload: true },
+    contract: {
+      domain: "ready",
+      codomain: "ready",
+      source: "ready",
+      target: "ready",
+      reload: true,
+    },
     available: {
       when: (s, c) => {
         if (s.tip !== "ready") return false;
-        // Context-sensitive: when context is supplied, require a positive delta.
         if (c !== undefined) return (c.delta ?? 0) > 0;
         return true;
       },
@@ -67,7 +80,13 @@ const defs = defineMorphisms<Counter, Ctx, InterpretCtx, Step>()([
       not_for: "Not ready",
       examples: ["finish"],
     },
-    contract: { domain: "ready", codomain: "done", userFollowup: false },
+    contract: {
+      domain: "ready",
+      codomain: "done",
+      source: "ready",
+      target: "done",
+      userFollowup: false,
+    },
     available: { when: (s) => s.tip === "ready", otherwise: "Must be ready." },
     effect: (s) => ({ ...s, tip: "done", steps: [...s.steps, "finish"] }),
   },
@@ -75,8 +94,8 @@ const defs = defineMorphisms<Counter, Ctx, InterpretCtx, Step>()([
 
 const space = createMorphismSpace<Counter, InterpretCtx, Step, typeof defs>({
   shape,
-  effectPath: "tip",
   definitions: defs,
+  objects,
 });
 
 const initial: Counter = { tip: "idle", value: 0, steps: [] };
@@ -111,7 +130,6 @@ describe("createMorphismSpace", () => {
     const armed = space.apply(initial, "arm");
     expect(armed.ok).toBe(true);
     if (!armed.ok) return;
-    // Corrupt tip to a value outside the schema enum via cast.
     const corrupt = { ...armed.state, tip: "nope" as Counter["tip"] };
     const result = space.apply(corrupt, "finish");
     expect(result.ok).toBe(false);
@@ -146,13 +164,13 @@ describe("createMorphismSpace", () => {
     expect(() =>
       createMorphismSpace({
         shape,
-        effectPath: "tip",
+        objects,
         definitions: defineMorphisms<Counter>()([
           {
             name: "arm",
             phase: "construction",
             criteria: { label: "A", what: "", not_for: "", examples: [] },
-            contract: { domain: "a", codomain: "b" },
+            contract: { domain: "a", codomain: "b", source: "idle", target: "ready" },
             available: { when: () => true, otherwise: "" },
             effect: (s) => s,
           },
@@ -160,13 +178,92 @@ describe("createMorphismSpace", () => {
             name: "arm",
             phase: "session",
             criteria: { label: "B", what: "", not_for: "", examples: [] },
-            contract: { domain: "a", codomain: "b" },
+            contract: { domain: "a", codomain: "b", source: "idle", target: "ready" },
             available: { when: () => true, otherwise: "" },
             effect: (s) => s,
           },
         ]),
       }),
     ).toThrow(/Duplicate morphism name: arm/);
+  });
+
+  test("multi-source morphisms expand and apply by logical name", () => {
+    const multi = createMorphismSpace({
+      shape,
+      objects,
+      definitions: defineMorphisms<Counter>()([
+        {
+          name: "close",
+          phase: "session",
+          criteria: { label: "Close", what: "", not_for: "", examples: [] },
+          contract: {
+            domain: "ready|done",
+            codomain: "idle",
+            source: "ready",
+            target: "idle",
+            sources: ["done"],
+          },
+          available: {
+            when: (s) => s.tip === "ready" || s.tip === "done",
+            otherwise: "Need ready or done.",
+          },
+          effect: (s) => ({ ...s, tip: "idle" as const, steps: [...s.steps, "close"] }),
+        },
+      ]),
+    });
+    expect(multi.stateSpace.transitions.map((t) => t.name).sort()).toEqual([
+      "close@@done",
+      "close@@ready",
+    ]);
+    const fromReady = multi.apply({ tip: "ready", value: 1, steps: [] }, "close");
+    expect(fromReady.ok).toBe(true);
+    if (!fromReady.ok) return;
+    expect(fromReady.state.tip).toBe("idle");
+    const fromDone = multi.apply({ tip: "done", value: 1, steps: [] }, "close");
+    expect(fromDone.ok).toBe(true);
+    expect(multi.enabledNames({ tip: "ready", value: 0, steps: [] })).toEqual(["close"]);
+    expect(multi.arrowInstance("close", "ready", "idle")?.name).toBe("close@@ready");
+  });
+
+  test("multi-target morphisms instantiate each landing tip", () => {
+    const multi = createMorphismSpace({
+      shape,
+      objects,
+      definitions: defineMorphisms<Counter>()([
+        {
+          name: "branch",
+          phase: "session",
+          criteria: { label: "Branch", what: "", not_for: "", examples: [] },
+          contract: {
+            domain: "ready",
+            codomain: "idle|done",
+            source: "ready",
+            target: "idle",
+            targets: ["done"],
+          },
+          available: { when: (s) => s.tip === "ready", otherwise: "Need ready." },
+          effect: (s, c) => ({
+            ...s,
+            tip: (c as { to?: "idle" | "done" } | undefined)?.to === "done" ? "done" : "idle",
+            steps: [...s.steps, "branch"],
+          }),
+        },
+      ]),
+    });
+    expect(multi.stateSpace.transitions.map((t) => t.name).sort()).toEqual([
+      "branch@@ready@@done",
+      "branch@@ready@@idle",
+    ]);
+    const toIdle = multi.apply({ tip: "ready", value: 0, steps: [] }, "branch");
+    expect(toIdle.ok).toBe(true);
+    if (!toIdle.ok) return;
+    expect(toIdle.state.tip).toBe("idle");
+    const toDone = multi.apply({ tip: "ready", value: 0, steps: [] }, "branch", { to: "done" });
+    expect(toDone.ok).toBe(true);
+    if (!toDone.ok) return;
+    expect(toDone.state.tip).toBe("done");
+    expect(multi.arrowInstance("branch", "ready", "done")?.target).toBe("done");
+    expect(multi.arrowInstance("branch", "ready", "idle")?.target).toBe("idle");
   });
 
   test("literal name typing is preserved", () => {

@@ -1,18 +1,22 @@
+import type { Schema } from "@very-coffee/statespace";
 import {
-  type Path,
-  type Schema,
-  type StateSpace,
-  StateSpaceRepository,
-  type Transition,
-} from "@statespace/core";
-import { type CertifiedArrow, checkAndApply, type SemanticObjectDef } from "./category";
+  type Arrow,
+  createMorphismSpace as createUpstreamMorphismSpace,
+  err,
+  instantiate,
+  ok,
+  type SemanticObject,
+} from "@very-coffee/statespace/morphisms";
 import type {
   ApplyResult,
+  CreateMorphismSpaceOptions,
   MorphismDefinition,
   MorphismInterpret,
   MorphismPhase,
   MorphismSpace,
 } from "./types";
+
+const SOURCE_SEP = "@@";
 
 /** Loose definition shape for compilation (context/interpret filled by domain packages). */
 type AnyDef<TState extends object, TInterpretCtx = unknown, TStep = unknown> = MorphismDefinition<
@@ -24,76 +28,75 @@ type AnyDef<TState extends object, TInterpretCtx = unknown, TStep = unknown> = M
   string
 >;
 
-/**
- * Single apply path: optional categorical membership/target closure, then
- * contextual availability, then effect. Used by both statespace transitions
- * and CertifiedArrow projections so legality is not duplicated.
- */
-function runDefApply<TState extends object, TInterpretCtx, TStep>(
-  def: AnyDef<TState, TInterpretCtx, TStep>,
-  state: TState,
-  context: unknown,
-  objects: readonly SemanticObjectDef<TState>[] | undefined,
-): ApplyResult<TState> {
-  const sourceKey = def.contract.source;
-  const targetKey = def.contract.target;
-  if (objects && sourceKey && targetKey) {
-    const certified = checkAndApply({
-      state,
-      context,
-      sourceKey,
-      targetKey,
-      objects,
-      effect: def.effect,
-      when: def.available.when,
-      otherwise: def.available.otherwise,
-    });
-    return certified.ok
-      ? { ok: true, state: certified.state }
-      : { ok: false, error: certified.error, state: certified.state };
-  }
-  if (!def.available.when(state, context)) {
-    return { ok: false, error: def.available.otherwise, state };
-  }
-  try {
-    return { ok: true, state: def.effect(state, context) };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "transform failed",
-      state,
-    };
-  }
+function sourceKeys(def: { contract: { source: string; sources?: readonly string[] } }): string[] {
+  return [...new Set([def.contract.source, ...(def.contract.sources ?? [])])];
+}
+
+function targetKeys(def: { contract: { target: string; targets?: readonly string[] } }): string[] {
+  return [...new Set([def.contract.target, ...(def.contract.targets ?? [])])];
 }
 
 /**
- * Compile availability + effect into a statespace transform.
- * Availability (and optional region certification) runs in the effect so apply
- * context reaches `available.when` and failures surface as apply errors.
+ * Instance name for a sealed (source, target) pair.
+ * - single pair → logical name
+ * - multi-source, single target → `name@@source`
+ * - multi-target → `name@@source@@target`
  */
-function toTransition<TState extends object, TInterpretCtx, TStep>(
+function instanceName(
+  logicalName: string,
+  source: string,
+  target: string,
+  sources: readonly string[],
+  targets: readonly string[],
+): string {
+  if (sources.length === 1 && targets.length === 1) return logicalName;
+  if (targets.length === 1) return `${logicalName}${SOURCE_SEP}${source}`;
+  return `${logicalName}${SOURCE_SEP}${source}${SOURCE_SEP}${target}`;
+}
+
+/** Strip `name@@…` expansion back to the domain definition name. */
+export function logicalTransitionName(transitionName: string): string {
+  const i = transitionName.indexOf(SOURCE_SEP);
+  return i >= 0 ? transitionName.slice(0, i) : transitionName;
+}
+
+function domainRun<TState extends object, TInterpretCtx, TStep>(
   def: AnyDef<TState, TInterpretCtx, TStep>,
-  effectPath: Path<TState>,
-  objects: readonly SemanticObjectDef<TState>[] | undefined,
-): Transition<TState> {
-  return {
-    name: def.name,
-    constraints: [],
-    effect: {
-      path: effectPath,
-      operation: "transform",
-      value: (_path, state, context) => {
-        const result = runDefApply(def, state as TState, context, objects);
-        if (!result.ok) return { success: false, error: result.error };
-        return { success: true, state: result.state };
-      },
-    },
-  } as Transition<TState>;
+) {
+  return (value: { state: TState }, context: unknown) => {
+    if (!def.available.when(value.state, context)) {
+      return err({ type: "unavailable" as const, reason: def.available.otherwise });
+    }
+    try {
+      return ok(def.effect(value.state, context));
+    } catch (cause) {
+      return err({
+        type: "effect-failed" as const,
+        cause: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  };
+}
+
+/** Seal one (source, target) pair via upstream `instantiate`. */
+function toArrow<TState extends object, TInterpretCtx, TStep>(
+  def: AnyDef<TState, TInterpretCtx, TStep>,
+  source: string,
+  target: string,
+  objects: readonly SemanticObject<TState>[],
+  name: string,
+): Arrow<TState> {
+  return instantiate(
+    { name: def.name, source, target, run: domainRun(def) },
+    undefined,
+    objects,
+    name,
+  );
 }
 
 /**
- * Compile declarative morphism definitions into a statespace + metadata registry.
- * Duplicate names throw. Literal definition names are preserved on the return type.
+ * Compile declarative domain morphism definitions into a statespace + metadata
+ * registry via `@very-coffee/statespace/morphisms`.
  */
 export function createMorphismSpace<
   TState extends object,
@@ -104,27 +107,61 @@ export function createMorphismSpace<
     TInterpretCtx,
     TStep
   >[],
->(options: {
-  shape: Schema<TState>;
-  effectPath: Path<TState>;
-  definitions: TDefs;
-  objects?: readonly SemanticObjectDef<TState>[];
-}): MorphismSpace<TState, unknown, TInterpretCtx, TStep, TDefs> {
-  const { shape, effectPath, definitions, objects } = options;
+>(
+  options: CreateMorphismSpaceOptions<TState, unknown, TInterpretCtx, TStep, TDefs>,
+): MorphismSpace<TState, unknown, TInterpretCtx, TStep, TDefs> {
+  const { shape, definitions, objects } = options;
   const seen = new Set<string>();
   for (const def of definitions) {
     if (seen.has(def.name)) {
       throw new Error(`Duplicate morphism name: ${def.name}`);
     }
     seen.add(def.name);
-  }
-
-  if (objects) {
-    const objectKeys = new Set(objects.map((o) => o.key));
-    if (objectKeys.size !== objects.length) {
-      throw new Error("Duplicate semantic object key.");
+    if (!def.contract.source || !def.contract.target) {
+      throw new Error(`Morphism ${def.name} requires contract.source and contract.target.`);
     }
   }
+
+  const objectKeys = new Set(objects.map((o) => o.key));
+  if (objectKeys.size !== objects.length) {
+    throw new Error("Duplicate semantic object key.");
+  }
+
+  const arrows: Arrow<TState>[] = [];
+  const logicalToInstances = new Map<string, string[]>();
+  /** logical → source → target → instance name */
+  const instanceByEndpoints = new Map<string, Map<string, Map<string, string>>>();
+
+  for (const def of definitions) {
+    const sources = sourceKeys(def);
+    const targets = targetKeys(def);
+    const instances: string[] = [];
+    const bySource = new Map<string, Map<string, string>>();
+    for (const key of [...sources, ...targets]) {
+      if (!objectKeys.has(key)) {
+        throw new Error(`Unknown object for ${def.name}: ${key}`);
+      }
+    }
+    for (const source of sources) {
+      const byTarget = new Map<string, string>();
+      for (const target of targets) {
+        const name = instanceName(def.name, source, target, sources, targets);
+        arrows.push(toArrow(def, source, target, objects, name));
+        instances.push(name);
+        byTarget.set(target, name);
+      }
+      bySource.set(source, byTarget);
+    }
+    logicalToInstances.set(def.name, instances);
+    instanceByEndpoints.set(def.name, bySource);
+  }
+
+  const upstream = createUpstreamMorphismSpace({
+    shape: shape as Schema<TState>,
+    objects: objects as readonly SemanticObject<TState>[],
+    morphisms: arrows,
+  });
+  const executable = upstream.makeExecutable();
 
   const byName = new Map(definitions.map((def) => [def.name, def])) as Map<
     TDefs[number]["name"],
@@ -140,51 +177,80 @@ export function createMorphismSpace<
     definitions.map((def) => [def.name, def.contract]),
   ) as Record<TDefs[number]["name"], TDefs[number]["contract"]>;
 
-  const transitions = definitions.map((def) => toTransition(def, effectPath, objects));
-
-  const stateSpace: StateSpace<TState> = {
-    shape: shape as Schema<TState>,
-    transitions,
-  };
-
-  let executable: ReturnType<typeof StateSpaceRepository.makeExecutable<TState>> | undefined;
-  const getExecutable = () => {
-    if (!executable) executable = StateSpaceRepository.makeExecutable(stateSpace);
-    return executable;
-  };
-
   const sessionNames = new Set(
     definitions.filter((d) => d.phase === "session").map((d) => d.name),
   ) as Set<TDefs[number]["name"]>;
 
-  const apply = (state: TState, name: string, context?: unknown): ApplyResult<TState> => {
-    const result = getExecutable().apply(state, name, context);
+  const applyInstance = (
+    state: TState,
+    transitionName: string,
+    context?: unknown,
+  ): ApplyResult<TState> => {
+    const result = executable.apply(state, transitionName, context);
     if (result.success) return { ok: true, state: result.state };
     return { ok: false, error: result.error ?? "apply failed", state: result.state };
   };
 
-  const arrowOf = (name: string): CertifiedArrow<TState> | undefined => {
-    const def = byName.get(name as TDefs[number]["name"]);
-    if (!def) return undefined;
-    const source = def.contract.source;
-    const target = def.contract.target;
-    if (!source || !target) return undefined;
-    return {
-      name: def.name,
-      source,
-      target,
-      apply: (state, context) => apply(state, def.name, context),
-    };
+  const apply = (state: TState, name: string, context?: unknown): ApplyResult<TState> => {
+    const instances = logicalToInstances.get(name);
+    if (!instances?.length) {
+      return { ok: false, error: `Unknown transition: ${name}`, state };
+    }
+    let last: ApplyResult<TState> = { ok: false, error: "apply failed", state };
+    for (const instance of instances) {
+      const result = applyInstance(state, instance, context);
+      if (result.ok) return result;
+      last = result;
+    }
+    return last;
+  };
+
+  const enabledNames = (state: TState, context?: unknown): TDefs[number]["name"][] => {
+    const enabled = new Set<string>();
+    for (const result of executable.enabled(state, context)) {
+      enabled.add(logicalTransitionName(result.name));
+    }
+    return [...enabled] as TDefs[number]["name"][];
+  };
+
+  const arrowOf = (name: string): Arrow<TState> | undefined => {
+    const instances = logicalToInstances.get(name);
+    const primary = instances?.[0];
+    return primary ? upstream.arrowOf(primary) : undefined;
+  };
+
+  const arrowInstance = (
+    logicalName: string,
+    source: string,
+    target?: string,
+  ): Arrow<TState> | undefined => {
+    const bySource = instanceByEndpoints.get(logicalName);
+    if (!bySource) return undefined;
+    const byTarget = bySource.get(source);
+    if (!byTarget) return undefined;
+    if (target !== undefined) {
+      const name = byTarget.get(target);
+      return name ? upstream.arrowOf(name) : undefined;
+    }
+    // Prefer primary target when unambiguous; otherwise first sealed for this source.
+    const primary = byName.get(logicalName as TDefs[number]["name"])?.contract.target;
+    if (primary && byTarget.has(primary)) {
+      const name = byTarget.get(primary);
+      return name ? upstream.arrowOf(name) : undefined;
+    }
+    const first = byTarget.values().next().value;
+    return first ? upstream.arrowOf(first) : undefined;
   };
 
   return {
     definitions,
     byName,
-    stateSpace,
+    stateSpace: upstream.stateSpace,
     criteria,
     contracts,
     objects,
     arrowOf,
+    arrowInstance,
     namesByPhase: (phase: MorphismPhase) =>
       definitions.filter((d) => d.phase === phase).map((d) => d.name) as TDefs[number]["name"][],
     sessionNames,
@@ -192,10 +258,7 @@ export function createMorphismSpace<
     what: (name) => criteria[name]?.what,
     reloads: (name) => contracts[name]?.reload === true,
     isUserFollowup: (name) => contracts[name]?.userFollowup !== false,
-    enabledNames: (state, context) =>
-      getExecutable()
-        .enabled(state, context)
-        .map((t) => t.name as TDefs[number]["name"]),
+    enabledNames,
     apply,
     interpretOf: (name) =>
       byName.get(name as TDefs[number]["name"])?.interpret as

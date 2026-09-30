@@ -1,8 +1,9 @@
-import { defineObjects, objectOf, type SemanticObjectDef } from "@workstream/morphism-space";
+import { defineObjects, objectOf, type SemanticObject } from "@workstream/morphism-space";
 import { Grain, type PathRegionKey, Region, Source, Tip } from "../ids";
 import type { PathState } from "../path-state";
 
 export type { PathRegionKey } from "../ids";
+export type { SemanticObject };
 
 /**
  * Canonical projection of PathState into a semantic region.
@@ -64,10 +65,12 @@ export function pathRegionKey(state: PathState): PathRegionKey {
   return Region.summaryPattern;
 }
 
-function region(key: PathRegionKey): SemanticObjectDef<PathState> {
+function region(key: PathRegionKey): SemanticObject<PathState> {
   return { key, contains: (s) => pathRegionKey(s) === key };
 }
 
+/** Fine-grained regions for UI / grain-level classification (pathRegionKey).
+ * Plan certificates use tipObjects + composeArrows, not these keys. */
 export const pathObjects = defineObjects<PathState>()([
   region(Region.query),
   region(Region.summaryPattern),
@@ -98,7 +101,21 @@ export const pathObjects = defineObjects<PathState>()([
   region(Region.timelineScrubber),
 ]);
 
-export function classifyPathState(state: PathState): SemanticObjectDef<PathState> | undefined {
+/**
+ * Tip-level partition for morphism source/target sealing
+ * (`@very-coffee/statespace/morphisms`). Exclusive by `tip`.
+ */
+export const tipObjects = defineObjects<PathState>()([
+  { key: Tip.query, contains: (s) => s.tip === Tip.query },
+  { key: Tip.summary, contains: (s) => s.tip === Tip.summary },
+  { key: Tip.displayed, contains: (s) => s.tip === Tip.displayed },
+  { key: Tip.faceted, contains: (s) => s.tip === Tip.faceted },
+  { key: Tip.committed, contains: (s) => s.tip === Tip.committed },
+  { key: Tip.selected, contains: (s) => s.tip === Tip.selected },
+  { key: Tip.timeline, contains: (s) => s.tip === Tip.timeline },
+]);
+
+export function classifyPathState(state: PathState): SemanticObject<PathState> | undefined {
   return objectOf(state, pathObjects);
 }
 

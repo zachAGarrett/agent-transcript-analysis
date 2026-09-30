@@ -25,11 +25,5 @@
     "noPropertyAccessFromIndexSignature": false
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
-  "exclude": [
-    "node_modules",
-    "vendor/statespace/tools",
-    "vendor/statespace/examples",
-    "vendor/statespace/**/dist",
-    "vendor/statespace/**/_tests"
-  ]
+  "exclude": ["node_modules"]
 }

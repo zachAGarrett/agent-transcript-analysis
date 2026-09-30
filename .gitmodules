@@ -1,3 +1,0 @@
-[submodule "vendor/statespace"]
-	path = vendor/statespace
-	url = https://github.com/coffee-fueled-dev/statespace.git

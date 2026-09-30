@@ -1,4 +1,4 @@
-import type { Schema } from "@statespace/core";
+import type { Schema } from "@very-coffee/statespace";
 import {
   Grain,
   type GrainKind,

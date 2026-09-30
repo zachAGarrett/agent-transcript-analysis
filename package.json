@@ -5,8 +5,7 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "vendor/statespace/packages/*"
+    "packages/*"
   ],
   "scripts": {
     "biome": "biome check .",
@@ -17,7 +16,6 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepare": "husky",
-    "submodules:init": "git submodule update --init --recursive",
     "cli": "bun cli/index.ts",
     "agent-review": "agent-review",
     "review": "agent-review run --scope staged --include-workstream",
@@ -30,7 +28,7 @@
     "@base-ui/react": "^1.8.0",
     "@khoralabs/agent-review": "^0.2.2",
     "@khoralabs/tkn": "^0.2.0",
-    "@statespace/core": "workspace:*",
+    "@very-coffee/statespace": "^0.1.0",
     "@workstream/lattice-viz": "workspace:*",
     "@workstream/viz-algebra": "workspace:*",
     "bun-plugin-tailwind": "^0.1.2",

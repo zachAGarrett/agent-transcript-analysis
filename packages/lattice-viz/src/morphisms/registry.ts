@@ -1,16 +1,6 @@
 import { defineMorphisms, Phase } from "@workstream/morphism-space";
 import { rollup, type Summary, topWithRemainder } from "@workstream/viz-algebra";
-import {
-  Grain,
-  Measure,
-  Morphism,
-  type PathRegionKey,
-  Region,
-  ResidualKey,
-  Source,
-  Tip,
-  topKLimit,
-} from "../ids";
+import { Grain, Measure, Morphism, ResidualKey, Source, Tip, topKLimit } from "../ids";
 import { patternDisplayLabel } from "../labels";
 import type { PathState, SelectionContext } from "../path-state";
 import { patternLengthKey, patternsByLength } from "../pattern-length";
@@ -126,21 +116,15 @@ function rankBinsByLength(bins: InterpretCtx["summary"]["bins"]) {
 function loadDef<N extends string>(
   name: N,
   criteria: MorphismDef["criteria"],
-  contract: MorphismDef["contract"],
+  contract: Omit<MorphismDef["contract"], "source" | "target">,
   patch: Pick<PathState, "grain" | "measure" | "source">,
   sql: string,
 ): MorphismDef<N> {
-  const target: PathRegionKey =
-    patch.grain === Grain.run || patch.source === Source.runScalars
-      ? Region.summaryRun
-      : patch.grain === Grain.length
-        ? Region.summaryLength
-        : Region.summaryPattern;
   return {
     name,
     phase: Phase.construction,
     criteria,
-    contract: { ...contract, source: Region.query, target },
+    contract: { ...contract, source: Tip.query, target: Tip.summary },
     available: {
       when: (s) => s.tip === Tip.query && s.source === Source.none,
       otherwise: "Need query tip.",
@@ -168,6 +152,10 @@ const topK = <N extends 5 | 10 | 20>(n: N): MorphismDef<`top_k_${N}`> => ({
   contract: {
     domain: "summary|faceted · !run · !hasTopK",
     codomain: `displayed|faceted · hasTopK · limit ${n}`,
+    source: Tip.summary,
+    target: Tip.displayed,
+    sources: [Tip.faceted],
+    targets: [Tip.displayed, Tip.faceted],
   },
   available: {
     when: (s) =>
@@ -349,6 +337,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "summary · pattern · !hasTopK",
       codomain: "summary · length",
+      source: Tip.summary,
+      target: Tip.summary,
     },
     available: {
       when: (s) =>
@@ -381,6 +371,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "summary · pattern · !hasTopK · !rankedByLength",
       codomain: "summary · pattern · rankedByLength",
+      source: Tip.summary,
+      target: Tip.summary,
     },
     available: {
       when: (s) =>
@@ -417,6 +409,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "summary · pattern · !hasTopK",
       codomain: "displayed|faceted · pattern-by-length · hasTopK",
+      source: Tip.summary,
+      target: Tip.displayed,
+      targets: [Tip.displayed, Tip.faceted],
       reload: true,
     },
     available: {
@@ -474,6 +469,10 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "summary|displayed|faceted · !run · !normalized",
       codomain: "displayed|faceted · normalized",
+      source: Tip.summary,
+      target: Tip.displayed,
+      sources: [Tip.displayed, Tip.faceted],
+      targets: [Tip.displayed, Tip.faceted],
     },
     available: {
       when: (s) =>
@@ -501,6 +500,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "summary|displayed · !faceted · !run-scalars",
       codomain: "faceted",
+      source: Tip.summary,
+      target: Tip.faceted,
+      sources: [Tip.displayed],
     },
     available: {
       when: (s) =>
@@ -523,6 +525,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "displayed|faceted|summary(run|length)",
       codomain: "committed",
+      source: Tip.displayed,
+      target: Tip.committed,
+      sources: [Tip.faceted, Tip.summary],
       userFollowup: false,
     },
     available: {
@@ -546,6 +551,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "committed|displayed|faceted|selected + selection context",
       codomain: "selected · hasSelection",
+      source: Tip.committed,
+      target: Tip.selected,
+      sources: [Tip.displayed, Tip.faceted, Tip.selected],
       userFollowup: false,
     },
     available: {
@@ -575,6 +583,10 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "selected|hasSelection",
       codomain: "committed|faceted · !hasSelection",
+      source: Tip.selected,
+      target: Tip.committed,
+      sources: [Tip.committed, Tip.displayed, Tip.faceted],
+      targets: [Tip.committed, Tip.faceted, Tip.displayed, Tip.query],
     },
     available: {
       when: (s) => s.tip !== Tip.timeline && (s.hasSelection || s.tip === Tip.selected),
@@ -594,6 +606,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "selected · selectionPatternId > 0",
       codomain: "same · detailRequested",
+      source: Tip.selected,
+      target: Tip.selected,
       userFollowup: false,
     },
     available: {
@@ -617,6 +631,10 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "detailRequested",
       codomain: "same · !detailRequested",
+      source: Tip.selected,
+      target: Tip.selected,
+      sources: [Tip.committed, Tip.displayed, Tip.faceted],
+      targets: [Tip.selected, Tip.committed, Tip.displayed, Tip.faceted],
       userFollowup: false,
     },
     available: {
@@ -637,6 +655,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "query · runHasEvents · !timeline",
       codomain: "timeline · graph",
+      source: Tip.query,
+      target: Tip.timeline,
       userFollowup: true,
     },
     available: {
@@ -662,6 +682,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "timeline",
       codomain: "query · !timeline",
+      source: Tip.timeline,
+      target: Tip.query,
       userFollowup: true,
     },
     available: {
@@ -687,6 +709,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "timeline · timelineChart≠graph",
       codomain: "timeline · timelineChart=graph",
+      source: Tip.timeline,
+      target: Tip.timeline,
       userFollowup: true,
     },
     available: {
@@ -700,13 +724,15 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     phase: Phase.session,
     criteria: {
       label: "Accuracy",
-      what: "Plot cumulative next-pattern hit rate over the decode timeline",
+      what: "Plot rolling next-pattern hit rate over the decode timeline",
       not_for: "When timeline is closed or already on accuracy",
       examples: ["Accuracy", "Hit rate", "Predictive accuracy"],
     },
     contract: {
       domain: "timeline · timelineChart≠accuracy",
       codomain: "timeline · timelineChart=accuracy",
+      source: Tip.timeline,
+      target: Tip.timeline,
       userFollowup: true,
     },
     available: {
@@ -727,6 +753,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "timeline · timelineChart≠length",
       codomain: "timeline · timelineChart=length",
+      source: Tip.timeline,
+      target: Tip.timeline,
       userFollowup: true,
     },
     available: {
@@ -747,6 +775,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "faceted · hasSelection · selectionRunId",
       codomain: "committed · !faceted · single run",
+      source: Tip.selected,
+      target: Tip.committed,
+      sources: [Tip.committed, Tip.faceted, Tip.displayed],
       reload: true,
     },
     available: {
@@ -777,6 +808,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "selected · grain length · lengthKey",
       codomain: "committed · pattern-by-length · hasTopK",
+      source: Tip.selected,
+      target: Tip.committed,
+      sources: [Tip.committed, Tip.summary, Tip.displayed],
       reload: true,
     },
     available: {
@@ -873,6 +907,9 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     contract: {
       domain: "committed|selected|displayed · pattern · hasTopK",
       codomain: "committed · length · !hasTopK",
+      source: Tip.committed,
+      target: Tip.committed,
+      sources: [Tip.selected, Tip.displayed],
       reload: true,
     },
     available: {

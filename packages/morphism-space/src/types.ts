@@ -1,4 +1,9 @@
-import type { Path, Schema, StateSpace } from "@statespace/core";
+import type { Schema, StateSpace } from "@very-coffee/statespace";
+import type {
+  Arrow,
+  CompositionCertificate,
+  SemanticObject,
+} from "@very-coffee/statespace/morphisms";
 
 export const Phase = {
   construction: "construction",
@@ -19,10 +24,21 @@ export type MorphismContract = {
   domain: string;
   /** Human-readable codomain description (compat / UI). */
   codomain: string;
-  /** Canonical semantic object key for the source region. */
-  source?: string;
+  /** Canonical semantic object key for the primary source region. */
+  source: string;
   /** Canonical semantic object key for the target region. */
-  target?: string;
+  target: string;
+  /**
+   * Extra source object keys when the morphism is legal from multiple tips.
+   * Compiled as distinct upstream arrows (`name@@source`) sharing domain metadata.
+   */
+  sources?: readonly string[];
+  /**
+   * Extra target object keys when the effect may land in more than one tip
+   * (e.g. clear selection → committed or faceted). Compiled as distinct
+   * upstream arrows (`name@@source@@target`) via `instantiate`.
+   */
+  targets?: readonly string[];
   /** Downstream consumers should reload data after this morphism. */
   reload?: boolean;
   /**
@@ -104,10 +120,17 @@ export type MorphismSpace<
   stateSpace: StateSpace<TState>;
   criteria: Record<TDefs[number]["name"], MorphismCriteria>;
   contracts: Record<TDefs[number]["name"], MorphismContract>;
-  /** Semantic objects when the space was created with a region taxonomy. */
-  objects?: readonly import("./category").SemanticObjectDef<TState>[];
-  /** Certified arrow projection when contract.source/target are set. */
-  arrowOf: (name: string) => import("./category").CertifiedArrow<TState, TContext> | undefined;
+  objects: readonly SemanticObject<TState>[];
+  arrowOf: (name: string) => Arrow<TState> | undefined;
+  /**
+   * Resolve a sealed instance by logical name + source tip (and optional
+   * landing tip for multi-target morphisms).
+   */
+  arrowInstance: (
+    logicalName: string,
+    source: string,
+    target?: string,
+  ) => Arrow<TState> | undefined;
   namesByPhase: (phase: MorphismPhase) => TDefs[number]["name"][];
   sessionNames: Set<TDefs[number]["name"]>;
   label: (name: TDefs[number]["name"]) => string;
@@ -133,12 +156,9 @@ export type CreateMorphismSpaceOptions<
   >[] = readonly MorphismDefinition<TState, TContext, TInterpretCtx, TStep, string>[],
 > = {
   shape: Schema<TState>;
-  /** Statespace path used for transform effects / before-transition constraints. */
-  effectPath: Path<TState>;
   definitions: TDefs;
-  /**
-   * Optional semantic objects. When present and a definition declares
-   * contract.source/target, apply certifies membership and target closure.
-   */
-  objects?: readonly import("./category").SemanticObjectDef<TState>[];
+  /** Tip/region taxonomy used for source membership and target closure. */
+  objects: readonly SemanticObject<TState>[];
 };
+
+export type { CompositionCertificate, SemanticObject };

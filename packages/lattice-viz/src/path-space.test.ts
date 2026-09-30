@@ -18,6 +18,7 @@ import {
   morphismCriteria,
   morphismDefs,
   parsePathPlan,
+  pathExecutable,
   pathSpace,
   revertPathTo,
   visiblePathSteps,
@@ -89,6 +90,16 @@ describe("composition contracts", () => {
 });
 
 describe("path space", () => {
+  test("pathExecutable exposes apply and enabled", () => {
+    const exec = pathExecutable();
+    expect(typeof exec.apply).toBe("function");
+    expect(typeof exec.enabled).toBe("function");
+    const enabled = exec.enabled(initialPathState);
+    expect(enabled.some((r) => r.name.includes(Morphism.loadPatternMass))).toBe(true);
+    const applied = exec.apply(initialPathState, Morphism.loadPatternMass);
+    expect(applied.success).toBe(true);
+  });
+
   test("illegal top_k before source is not enabled", () => {
     expect(enabledNames(initialPathState)).not.toContain(Morphism.topK10);
     expect(enabledNames(initialPathState)).toContain(Morphism.loadPatternMass);
@@ -615,14 +626,45 @@ describe("follow-up morphisms", () => {
 });
 
 describe("morphism contracts", () => {
-  test("every definition compiles to exactly one transition; projections share names", () => {
+  test("every definition compiles; multi-source/target expands; projections share logical names", () => {
     const defNames = morphismDefs.map((d) => d.name).sort();
-    const transitionNames = pathSpace.transitions.map((t) => t.name).sort();
-    expect(transitionNames).toEqual(defNames);
     expect(Object.keys(morphismCriteria).sort()).toEqual(defNames);
     expect(Object.keys(morphismContracts).sort()).toEqual(defNames);
     expect([...morphismByName.keys()].sort()).toEqual(defNames);
-    expect(pathSpace.transitions).toHaveLength(morphismDefs.length);
+
+    const logicalOf = (name: string) => {
+      const i = name.indexOf("@@");
+      return i >= 0 ? name.slice(0, i) : name;
+    };
+    const logicalFromTransitions = [
+      ...new Set(pathSpace.transitions.map((t) => logicalOf(t.name))),
+    ].sort();
+    expect(logicalFromTransitions).toEqual(defNames);
+
+    for (const def of morphismDefs) {
+      const contract = def.contract as {
+        source: string;
+        target: string;
+        sources?: readonly string[];
+        targets?: readonly string[];
+      };
+      const sources = [...new Set([contract.source, ...(contract.sources ?? [])])];
+      const targets = [...new Set([contract.target, ...(contract.targets ?? [])])];
+      const expected: string[] = [];
+      for (const source of sources) {
+        for (const target of targets) {
+          if (sources.length === 1 && targets.length === 1) expected.push(def.name);
+          else if (targets.length === 1) expected.push(`${def.name}@@${source}`);
+          else expected.push(`${def.name}@@${source}@@${target}`);
+        }
+      }
+      expected.sort();
+      const actual = pathSpace.transitions
+        .map((t) => t.name)
+        .filter((n) => logicalOf(n) === def.name)
+        .sort();
+      expect(actual).toEqual(expected);
+    }
   });
 
   test("enabledNames / applyPath parity across load, display, session, reload paths", () => {
@@ -657,8 +699,11 @@ describe("morphism contracts", () => {
 
   test("every transition has a contract and criteria entry", () => {
     for (const transition of pathSpace.transitions) {
-      expect(morphismContracts[transition.name]).toBeDefined();
-      const criteria = morphismCriteria[transition.name];
+      const logical = transition.name.includes("@@")
+        ? transition.name.slice(0, transition.name.indexOf("@@"))
+        : transition.name;
+      expect(morphismContracts[logical]).toBeDefined();
+      const criteria = morphismCriteria[logical];
       expect(criteria).toBeDefined();
       expect(criteria?.label.length).toBeGreaterThan(0);
     }

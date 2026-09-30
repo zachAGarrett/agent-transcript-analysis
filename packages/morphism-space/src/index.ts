@@ -1,17 +1,13 @@
-export type {
-  CertifiedArrow,
-  CompositionCertificate,
-  SemanticObjectDef,
-} from "./category";
+export { createMorphismSpace, logicalTransitionName } from "./create";
+export type { CompositionCertificate, SemanticObject, SemanticObjectDef } from "./objects";
 export {
-  checkAndApply,
+  classify,
   composeArrows,
   defineObjects,
   identityArrow,
   objectByKey,
   objectOf,
-} from "./category";
-export { createMorphismSpace } from "./create";
+} from "./objects";
 export type {
   ApplyResult,
   CreateMorphismSpaceOptions,

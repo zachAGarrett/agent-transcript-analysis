@@ -167,7 +167,3 @@ export type TopKByKind = (typeof TopKBy)[keyof typeof TopKBy];
 export const ResidualKey = {
   other: "other",
 } as const;
-
-export const EffectPath = {
-  tip: "tip",
-} as const;

@@ -1,10 +1,9 @@
-import { StateSpaceRepository } from "@statespace/core";
+import { StateSpaceRepository } from "@very-coffee/statespace";
 import { createMorphismSpace } from "@workstream/morphism-space";
-import { EffectPath } from "../ids";
 import type { PathState } from "../path-state";
 import { pathStateSchema } from "../path-state";
 import type { PathStep } from "../types";
-import { pathObjects } from "./objects";
+import { tipObjects } from "./objects";
 import { morphismDefs } from "./registry";
 import type { InterpretCtx, MorphismContract, MorphismCriteria } from "./types";
 
@@ -15,9 +14,8 @@ export const pathMorphismSpace = createMorphismSpace<
   typeof morphismDefs
 >({
   shape: pathStateSchema,
-  effectPath: EffectPath.tip,
   definitions: morphismDefs,
-  objects: pathObjects,
+  objects: tipObjects,
 });
 
 export const pathSpace = pathMorphismSpace.stateSpace;
@@ -59,6 +57,7 @@ export function applyPath(
 
 let executable: ReturnType<typeof StateSpaceRepository.makeExecutable<PathState>> | undefined;
 
+/** Lazy executable StateSpace (apply / enabled), not the raw definition. */
 export function pathExecutable() {
   if (!executable) executable = StateSpaceRepository.makeExecutable(pathSpace);
   return executable;

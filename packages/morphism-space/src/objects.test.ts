@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Schema } from "@statespace/core";
+import type { Schema } from "@very-coffee/statespace";
 import {
-  checkAndApply,
   composeArrows,
   createMorphismSpace,
   defineMorphisms,
@@ -25,6 +24,8 @@ const shape = {
     value: { type: "number" },
     steps: { type: "array", items: { type: "string" } },
   },
+  required: ["tip", "value", "steps"],
+  additionalProperties: false,
 } as unknown as Schema<Tip>;
 
 const defs = defineMorphisms<Tip>()([
@@ -56,7 +57,6 @@ const defs = defineMorphisms<Tip>()([
 
 const space = createMorphismSpace({
   shape,
-  effectPath: "tip",
   definitions: defs,
   objects,
 });
@@ -78,55 +78,13 @@ describe("semantic objects", () => {
   });
 });
 
-describe("checkAndApply", () => {
-  test("rejects wrong source region", () => {
-    const result = checkAndApply({
-      state: idle,
-      sourceKey: "ready" as const,
-      targetKey: "done" as const,
-      objects,
-      effect: (s) => ({ ...s, tip: "done" as const }),
-    });
-    expect(result.ok).toBe(false);
-    expect(result.certificate.ok).toBe(false);
-  });
-
-  test("rejects target closure failure", () => {
-    const result = checkAndApply({
-      state: idle,
-      sourceKey: "idle" as const,
-      targetKey: "ready" as const,
-      objects,
-      effect: (s) => ({ ...s, tip: "done" as const }),
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatch(/expected ready/);
-  });
-
-  test("succeeds with membership and closure", () => {
-    const result = checkAndApply({
-      state: idle,
-      sourceKey: "idle" as const,
-      targetKey: "ready" as const,
-      objects,
-      effect: (s) => ({ ...s, tip: "ready" as const }),
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.state.tip).toBe("ready");
-    expect(result.certificate.source).toBe("idle");
-    expect(result.certificate.target).toBe("ready");
-  });
-});
-
 describe("identity and composition", () => {
   test("identity is a no-op endomorphism", () => {
-    const id = identityArrow<Tip>("idle");
-    const result = id.apply(idle);
+    const id = identityArrow<Tip, "idle">("idle");
+    const result = id.run({ object: "idle", state: idle });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.state).toEqual(idle);
+    expect(result.value.state).toEqual(idle);
     expect(id.source).toBe(id.target);
   });
 
@@ -136,7 +94,6 @@ describe("identity and composition", () => {
     expect(arm).toBeDefined();
     expect(finish).toBeDefined();
     if (!arm || !finish) return;
-    // arm: idle→ready, finish: ready→done — composing finish then arm mismatches
     const bad = composeArrows([finish, arm]);
     expect(bad.certificate.ok).toBe(false);
     expect(bad.certificate.error).toMatch(/Cannot compose/);
@@ -149,43 +106,27 @@ describe("identity and composition", () => {
     expect(arm && bump && finish).toBeTruthy();
     if (!arm || !bump || !finish) return;
 
-    // Nested (arm∘bump)∘finish vs arm∘(bump∘finish) vs flat — same denotation
     const armBump = composeArrows([arm, bump]);
     expect(armBump.certificate.ok).toBe(true);
-    const leftAssoc = composeArrows([
-      {
-        name: "(arm∘bump)",
-        source: armBump.certificate.source ?? "idle",
-        target: armBump.certificate.target ?? "ready",
-        apply: armBump.apply,
-      },
-      finish,
-    ]);
+    const leftAssoc = composeArrows([armBump.arrow, finish]);
     const bumpFinish = composeArrows([bump, finish]);
     expect(bumpFinish.certificate.ok).toBe(true);
-    const rightAssoc = composeArrows([
-      arm,
-      {
-        name: "(bump∘finish)",
-        source: bumpFinish.certificate.source ?? "ready",
-        target: bumpFinish.certificate.target ?? "done",
-        apply: bumpFinish.apply,
-      },
-    ]);
+    const rightAssoc = composeArrows([arm, bumpFinish.arrow]);
     const flat = composeArrows([arm, bump, finish]);
     expect(flat.certificate.ok).toBe(true);
     expect(flat.certificate.steps).toEqual(["arm", "bump", "finish"]);
     expect(flat.certificate.source).toBe("idle");
     expect(flat.certificate.target).toBe("done");
 
-    const composed = flat.apply(idle);
+    const start = { object: "idle" as const, state: idle };
+    const composed = flat.arrow.run(start);
     expect(composed.ok).toBe(true);
     if (!composed.ok) return;
-    expect(leftAssoc.apply(idle)).toEqual(composed);
-    expect(rightAssoc.apply(idle)).toEqual(composed);
-    expect(composed.state.tip).toBe("done");
-    expect(composed.state.steps).toEqual(["arm", "bump", "finish"]);
-    expect(composed.state.value).toBe(1);
+    expect(leftAssoc.arrow.run(start)).toEqual(composed);
+    expect(rightAssoc.arrow.run(start)).toEqual(composed);
+    expect(composed.value.state.tip).toBe("done");
+    expect(composed.value.state.steps).toEqual(["arm", "bump", "finish"]);
+    expect(composed.value.state.value).toBe(1);
 
     let state = idle;
     for (const name of ["arm", "bump", "finish"] as const) {
@@ -194,49 +135,21 @@ describe("identity and composition", () => {
       if (!next.ok) return;
       state = next.state;
     }
-    expect(state).toEqual(composed.state);
+    expect(state).toEqual(composed.value.state);
   });
 
   test("identity laws: id ∘ f = f = f ∘ id", () => {
     const arm = space.arrowOf("arm");
     expect(arm).toBeDefined();
     if (!arm) return;
-    const idIdle = identityArrow<Tip>("idle");
-    const idReady = identityArrow<Tip>("ready");
+    const idIdle = identityArrow<Tip, "idle">("idle");
+    const idReady = identityArrow<Tip, "ready">("ready");
     const leftId = composeArrows([idIdle, arm]);
     const rightId = composeArrows([arm, idReady]);
     expect(leftId.certificate.ok).toBe(true);
     expect(rightId.certificate.ok).toBe(true);
-    expect(leftId.apply(idle)).toEqual(arm.apply(idle));
-    expect(rightId.apply(idle)).toEqual(arm.apply(idle));
-  });
-});
-
-describe("createMorphismSpace with objects", () => {
-  test("arrowOf projects certified arrows", () => {
-    const arm = space.arrowOf("arm");
-    expect(arm?.source).toBe("idle");
-    expect(arm?.target).toBe("ready");
-  });
-
-  test("apply certifies target closure via objects", () => {
-    const armed = space.apply(idle, "arm");
-    expect(armed.ok).toBe(true);
-    if (!armed.ok) return;
-    expect(objectOf(armed.state, objects)?.key).toBe("ready");
-  });
-
-  test("duplicate object keys throw", () => {
-    expect(() =>
-      createMorphismSpace({
-        shape,
-        effectPath: "tip",
-        definitions: defs,
-        objects: [
-          { key: "idle", contains: (s) => s.tip === "idle" },
-          { key: "idle", contains: (s) => s.tip === "ready" },
-        ],
-      }),
-    ).toThrow(/Duplicate semantic object key/);
+    const start = { object: "idle" as const, state: idle };
+    expect(leftId.arrow.run(start)).toEqual(arm.run(start));
+    expect(rightId.arrow.run(start)).toEqual(arm.run(start));
   });
 });

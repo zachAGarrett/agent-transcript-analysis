@@ -80,10 +80,10 @@ describe("path semantic objects", () => {
     for (const [name, steps] of Object.entries(presetPaths)) {
       const { state, certificate } = composeCertifiedPath(steps);
       expect(certificate.ok).toBe(true);
-      expect(certificate.source).toBe(Region.query);
+      expect(certificate.source).toBe(Tip.query);
       expect(certificate.steps).toEqual(steps.map((s) => s.name));
       expect(state.tip).toBe(Tip.committed);
-      expect(certificate.target?.startsWith("committed.")).toBe(true);
+      expect(certificate.target).toBe(Tip.committed);
       expect(name.length).toBeGreaterThan(0);
     }
   });
