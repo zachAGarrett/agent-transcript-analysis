@@ -6,11 +6,13 @@ import "./adapters";
 import {
   applyPath,
   enabledNames,
+  initialPathState,
   parsePathPlan,
   planRunsForState,
   restoreSessionTip,
   type SelectionContext,
   selectionContextFromState,
+  Tip,
 } from "@workstream/lattice-viz";
 import type { DecideResponse, DecideStep } from "./adapters";
 import { defaultRoot, proposePathRules, proposePathWithJev, RunStore } from "./adapters";
@@ -25,14 +27,17 @@ export type DecideStreamEvent =
 async function decideQuestion(
   question: string,
   catalogRuns: string[],
+  runHasEvents: boolean,
   onStep?: (step: DecideStep) => void | Promise<void>,
 ): Promise<DecideResponse> {
   const hooks = onStep ? { onStep } : undefined;
-  if (!process.env.AI_GATEWAY_API_KEY) return proposePathRules(question, catalogRuns, hooks);
+  if (!process.env.AI_GATEWAY_API_KEY) {
+    return proposePathRules(question, catalogRuns, hooks, runHasEvents);
+  }
   try {
-    return await proposePathWithJev(question, catalogRuns, hooks);
+    return await proposePathWithJev(question, catalogRuns, hooks, runHasEvents);
   } catch {
-    return proposePathRules(question, catalogRuns, hooks);
+    return proposePathRules(question, catalogRuns, hooks, runHasEvents);
   }
 }
 
@@ -49,6 +54,9 @@ export async function handleApi(request: Request): Promise<Response> {
       );
     }
     const { runs } = await store.catalog();
+    const selectedRunId = url.searchParams.get("run") ?? "";
+    const selected = runs.find((r) => r.id === selectedRunId) ?? runs[0];
+    const runHasEvents = Boolean(selected?.hasEvents);
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -60,6 +68,7 @@ export async function handleApi(request: Request): Promise<Response> {
         const result = await decideQuestion(
           question,
           runs.map((r) => r.id),
+          runHasEvents,
           async (step) => {
             await write({ type: "step", step });
           },
@@ -103,16 +112,36 @@ export async function handleApi(request: Request): Promise<Response> {
         runs: string[];
         selection?: SelectionContext;
         detailRequested?: boolean;
+        timelineRequested?: boolean;
+        timelineChart?: "graph" | "length" | "accuracy";
+        tip?: string;
+        runHasEvents?: boolean;
       };
       const { runs } = await store.catalog();
-      const { state: constructed } = parsePathPlan(
-        session,
-        runs.map((r) => r.id),
+      const catalogIds = runs.map((r) => r.id);
+      const scopeRunId = session.runs[0] ?? session.selection?.runId ?? catalogIds[0] ?? "";
+      const runHasEvents =
+        typeof session.runHasEvents === "boolean"
+          ? session.runHasEvents
+          : Boolean(runs.find((r) => r.id === scopeRunId)?.hasEvents);
+      const constructed =
+        session.steps.length === 0
+          ? { ...initialPathState, runHasEvents }
+          : { ...parsePathPlan(session, catalogIds).state, runHasEvents };
+      const state = restoreSessionTip(
+        constructed,
+        session.selection,
+        session.detailRequested,
+        session.timelineRequested,
+        session.timelineChart,
+        session.tip === Tip.query || session.tip === Tip.timeline ? session.tip : undefined,
+        runHasEvents,
       );
-      const state = restoreSessionTip(constructed, session.selection, session.detailRequested);
       const next = applyPath(state, action, session.selection);
       if (!next.ok) throw new Error(next.error);
-      const runsOut = planRunsForState(next.state, session.runs);
+      const baseRuns = session.runs.length ? session.runs : catalogIds.slice(0, 1);
+      const runsOut =
+        next.state.steps.length === 0 ? baseRuns : planRunsForState(next.state, baseRuns);
       const enabledContext = selectionContextFromState(next.state);
       result = {
         state: next.state,
@@ -127,6 +156,11 @@ export async function handleApi(request: Request): Promise<Response> {
         node,
         url.searchParams.get("version") ?? "",
       );
+    } else if (url.pathname === "/api/pattern-id") {
+      const token = url.searchParams.get("token") ?? "";
+      result = {
+        id: store.patternIdByToken(url.searchParams.get("run") ?? "", token),
+      };
     } else if (url.pathname === "/api/decode-traces") {
       const { listDecodeTraces } = await import("./adapters/decode-traces");
       result = await listDecodeTraces(store.root, url.searchParams.get("run") ?? "");
@@ -152,6 +186,9 @@ export async function handleApi(request: Request): Promise<Response> {
       const summary = await readDecodeSummary(store.root, url.searchParams.get("run") ?? "");
       if (!summary) throw new Error("No decode-summary.json for this run.");
       result = summary;
+    } else if (url.pathname === "/api/runtime-timeline") {
+      const { readRuntimeTimeline } = await import("./adapters/runtime-timeline");
+      result = await readRuntimeTimeline(store.root, url.searchParams.get("run") ?? "");
     } else return new Response("Not found", { status: 404 });
     return Response.json(result, {
       headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },

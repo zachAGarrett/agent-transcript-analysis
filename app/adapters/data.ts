@@ -92,6 +92,7 @@ export class RunStore {
       join(this.root, id, "report.json"),
       join(this.root, id, "decodes.jsonl"),
       join(this.root, id, "decode-summary.json"),
+      join(this.root, id, "events.jsonl"),
     ]
       .map((file) => {
         try {
@@ -116,11 +117,13 @@ export class RunStore {
   }
 
   private async metadata(id: string) {
-    const empty = { fixture: null, train: null, heldOut: null };
+    const empty = { fixture: null, train: null, heldOut: null, hasEvents: false };
+    const hasEvents = await Bun.file(join(this.root, id, "events.jsonl")).exists();
     const file = Bun.file(join(this.root, id, "report.json"));
     if (!(await file.exists()))
       return {
         ...empty,
+        hasEvents,
         warning: "No report: training population and codebook provenance are unknown.",
       };
     try {
@@ -135,17 +138,25 @@ export class RunStore {
       if (job?.artifacts?.decodeSummaryJson && !hasSummary) {
         warnings.push("report references decode-summary.json but the file is missing.");
       }
+      if (job?.artifacts?.eventsJsonl && !hasEvents) {
+        warnings.push("report references events.jsonl but the file is missing.");
+      }
       return {
         fixture: typeof job?.producer?.dir === "string" ? job.producer.dir : null,
         train: typeof job?.trainCount === "number" ? job.trainCount : null,
         heldOut: typeof job?.heldOutCount === "number" ? job.heldOutCount : null,
+        hasEvents,
         warning:
           warnings.length > 0
             ? warnings.join(" ")
             : "Report provides context; verify codebook version against fixture scheme.",
       };
     } catch {
-      return { ...empty, warning: "Report could not be read; provenance is unknown." };
+      return {
+        ...empty,
+        hasEvents,
+        warning: "Report could not be read; provenance is unknown.",
+      };
     }
   }
 
@@ -374,6 +385,18 @@ export class RunStore {
     if (expectedVersion !== this.version(id))
       throw new Error("Run changed during query. Refresh this view.");
     return detail;
+  }
+
+  /** Resolve a lattice node id from its composite token string. */
+  patternIdByToken(id: string, token: string): number {
+    if (!token) throw new Error("Missing pattern token.");
+    return this.read(id, (db) => {
+      const row = db
+        .query<{ id: number }, [string]>("SELECT id FROM nodes WHERE token = ?")
+        .get(token);
+      if (!row) throw new Error("Pattern not found in this run’s lattice.");
+      return row.id;
+    });
   }
 }
 

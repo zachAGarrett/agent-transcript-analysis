@@ -94,6 +94,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PatternDetail, runVersion } from "./PatternDetail";
+import { TimelineScrubber } from "./TimelineScrubber";
 
 const number = (n: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(n);
@@ -116,9 +117,12 @@ type DecideChecklistItem =
 
 async function streamDecide(
   question: string,
+  selectedRunId: string,
   onStep: (step: DecideStep) => void,
 ): Promise<DecideResponse> {
-  const response = await fetch(`/api/decide?question=${encodeURIComponent(question)}`);
+  const params = new URLSearchParams({ question });
+  if (selectedRunId) params.set("run", selectedRunId);
+  const response = await fetch(`/api/decide?${params}`);
   if (!response.ok) {
     const data = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(data?.error ?? "Path proposal failed.");
@@ -157,6 +161,13 @@ function samePlan(a: PathPlan | null, b: PathPlan): boolean {
 }
 
 type PathCrumb = { name: string; label: string; index: number };
+
+/** Sentinel breadcrumb index for session tip open_timeline_scrubber (not a plan step). */
+const TIMELINE_CRUMB_INDEX = -1;
+/** Sentinel for show_timeline_accuracy tip crumb. */
+const ACCURACY_CRUMB_INDEX = -2;
+/** Sentinel for show_timeline_length tip crumb. */
+const LENGTH_CRUMB_INDEX = -3;
 
 function PathActionsBreadcrumb({
   crumbs,
@@ -266,23 +277,29 @@ export function Explorer() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
-  const pathState = session.pathState.steps.length ? session.pathState : null;
+  const tipState = session.pathState;
+  const pathState = tipState.steps.length || tipState.tip === "timeline" ? tipState : null;
   const selected = session.selectedRunId;
   const overviewMode = stateIsOverview(pathState);
   const selection = selectionOf(session);
   const compare = session.display.faceted;
   const normalized = session.display.normalized;
   const limit = session.display.limit;
-  const currentPlan = pathState ? { steps: session.steps, runs: session.catalogRuns } : null;
+  const currentPlan = tipState.steps.length
+    ? { steps: session.steps, runs: session.catalogRuns }
+    : null;
+  const onTimeline = tipState.tip === "timeline" || tipState.timelineRequested;
 
   const followups = useMemo(() => {
-    if (!pathState) return [];
-    return enabledNames(pathState, selectionContextFromState(pathState));
-  }, [pathState]);
+    return enabledNames(tipState, selectionContextFromState(tipState));
+  }, [tipState]);
   const detailOpen =
-    pathState?.detailRequested && (pathState.selectionPatternId ?? 0) > 0
-      ? { runId: pathState.selectionRunId, nodeId: pathState.selectionPatternId }
+    tipState.detailRequested && (tipState.selectionPatternId ?? 0) > 0
+      ? { runId: tipState.selectionRunId, nodeId: tipState.selectionPatternId }
       : null;
+  const timelineRunId = onTimeline
+    ? tipState.selectionRunId || selected || session.catalogRuns[0] || ""
+    : "";
 
   const loadRuns = useCallback(async () => {
     try {
@@ -295,7 +312,13 @@ export function Explorer() {
         const selectedRunId = ids.includes(prev.selectedRunId)
           ? prev.selectedRunId
           : (ids[0] ?? "");
-        return { ...prev, catalogRuns: ids, selectedRunId };
+        const hasEvents = Boolean(result.runs.find((r) => r.id === selectedRunId)?.hasEvents);
+        return {
+          ...prev,
+          catalogRuns: ids,
+          selectedRunId,
+          pathState: { ...prev.pathState, runHasEvents: hasEvents },
+        };
       });
       if (sessionRef.current.pathState.steps.length) setViewTick((n) => n + 1);
     } catch {
@@ -308,7 +331,15 @@ export function Explorer() {
   }, [loadRuns]);
 
   useEffect(() => {
-    if (!runs.length || !session.pathState.steps.length) return;
+    const hasEvents = Boolean(runs.find((r) => r.id === selected)?.hasEvents);
+    setSession((prev) => {
+      if (prev.pathState.runHasEvents === hasEvents) return prev;
+      return { ...prev, pathState: { ...prev.pathState, runHasEvents: hasEvents } };
+    });
+  }, [runs, selected]);
+
+  useEffect(() => {
+    if (!runs.length || !session.pathState.steps.length || onTimeline) return;
     void viewTick;
     const request = ++generation.current;
     setChartsLoading(true);
@@ -336,7 +367,7 @@ export function Explorer() {
         setChartsLoading(false);
         setChartsError("This view could not be loaded.");
       });
-  }, [session.pathState.steps, runs, viewTick]);
+  }, [session.pathState.steps, runs, viewTick, onTimeline]);
 
   const applyFollowup = useCallback(
     async (
@@ -346,7 +377,6 @@ export function Explorer() {
     ): Promise<{ plan: PathPlan; state: PathState; enabled: string[] }> => {
       const tip = sessionRef.current;
       const plan = basePlan ?? effectivePlan(tip);
-      if (!plan.steps.length) throw new Error("No current path.");
       const sel = nextSelection !== undefined ? nextSelection : selectionOf(tip);
       const result = await api<{
         plan: PathPlan;
@@ -355,13 +385,24 @@ export function Explorer() {
       }>(
         `/api/followup?action=${encodeURIComponent(action)}&session=${encodeURIComponent(
           JSON.stringify({
-            ...plan,
+            steps: plan.steps,
+            runs: plan.runs.length
+              ? plan.runs
+              : ([tip.selectedRunId || tip.catalogRuns[0]].filter(Boolean) as string[]),
             selection: sel,
             detailRequested: tip.pathState.detailRequested,
+            timelineRequested: tip.pathState.timelineRequested,
+            timelineChart: tip.pathState.timelineChart,
+            tip: tip.pathState.tip,
+            runHasEvents: tip.pathState.runHasEvents,
           }),
         )}`,
       );
-      setSession((prev) => sessionAfterFollowup(prev, result.plan, result.state));
+      setSession((prev) => {
+        const next = sessionAfterFollowup(prev, result.plan, result.state);
+        sessionRef.current = next;
+        return next;
+      });
       if (morphismReloads(action)) {
         setViewTick((n) => n + 1);
       }
@@ -391,6 +432,24 @@ export function Explorer() {
     [runs],
   );
 
+  const onBreadcrumbCrumb = useCallback(
+    (throughIndex: number) => {
+      if (throughIndex === ACCURACY_CRUMB_INDEX || throughIndex === LENGTH_CRUMB_INDEX) return;
+      const tip = sessionRef.current;
+      if (throughIndex === TIMELINE_CRUMB_INDEX) {
+        if (tip.pathState.timelineChart !== "graph") {
+          void applyFollowup("show_timeline_graph");
+        }
+        return;
+      }
+      if (tip.pathState.tip === "timeline" || tip.pathState.timelineRequested) {
+        return;
+      }
+      revertToPathIndex(throughIndex);
+    },
+    [applyFollowup, revertToPathIndex],
+  );
+
   const onAsk = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -402,7 +461,7 @@ export function Explorer() {
     setDecideChecklist([{ key: "pending", kind: "pending", label: "Choosing next step…" }]);
     let decision: DecideResponse;
     try {
-      decision = await streamDecide(q, (step) => {
+      decision = await streamDecide(q, selected, (step) => {
         const key = `${stepIndex++}:${step.id}`;
         setDecideChecklist((prev) => {
           const done: DecideChecklistItem[] = [
@@ -469,24 +528,63 @@ export function Explorer() {
   }, [view, selected, pathState]);
 
   const heading = useMemo(() => {
+    if (onTimeline) {
+      const crumbs: PathCrumb[] = [
+        {
+          name: "open_timeline_scrubber",
+          label: morphismLabel("open_timeline_scrubber"),
+          index: TIMELINE_CRUMB_INDEX,
+        },
+      ];
+      if (tipState.timelineChart === "accuracy") {
+        crumbs.push({
+          name: "show_timeline_accuracy",
+          label: morphismLabel("show_timeline_accuracy"),
+          index: ACCURACY_CRUMB_INDEX,
+        });
+      } else if (tipState.timelineChart === "length") {
+        crumbs.push({
+          name: "show_timeline_length",
+          label: morphismLabel("show_timeline_length"),
+          index: LENGTH_CRUMB_INDEX,
+        });
+      }
+      return {
+        crumbs,
+        description: pathTitle(tipState).description,
+      };
+    }
     if (!currentPlan?.steps.length) {
       return { crumbs: null as PathCrumb[] | null, description: "" };
     }
-    const meta = pathState ? pathTitle(pathState) : { description: "" };
+    const meta = pathTitle(tipState);
     const visible = visiblePathSteps(currentPlan.steps);
+    const crumbs: PathCrumb[] = visible.map(({ step, index }) => ({
+      name: step.name,
+      label: morphismLabel(step.name),
+      index,
+    }));
     return {
-      crumbs: visible.map(({ step, index }) => ({
-        name: step.name,
-        label: morphismLabel(step.name),
-        index,
-      })),
+      crumbs,
       description: meta.description,
     };
-  }, [currentPlan, pathState]);
+  }, [currentPlan, tipState, onTimeline]);
 
-  const hasPath = Boolean(heading.crumbs?.length);
+  const hasPath = Boolean(heading.crumbs?.length) || onTimeline;
 
-  const visibleFollowups = followups.filter(isUserFollowupChip);
+  const visibleFollowups = followups.filter((name) => {
+    if (!isUserFollowupChip(name)) return false;
+    if (tipState.tip === "query") return name === "open_timeline_scrubber";
+    if (onTimeline) {
+      return (
+        name === "close_timeline_scrubber" ||
+        name === "show_timeline_graph" ||
+        name === "show_timeline_accuracy" ||
+        name === "show_timeline_length"
+      );
+    }
+    return name !== "open_timeline_scrubber";
+  });
   const detailVersion = detailOpen ? runVersion(runs, detailOpen.runId) : "";
 
   return (
@@ -613,20 +711,22 @@ export function Explorer() {
             </div>
           </aside>
           <section className="min-w-0">
-            {hasPath && heading.crumbs ? (
+            {hasPath ? (
               <>
-                <div className="mb-6">
-                  <PathActionsBreadcrumb crumbs={heading.crumbs} onRevert={revertToPathIndex} />
-                  {heading.description ? (
-                    <p
-                      id="description"
-                      className="text-muted-foreground mt-2 text-xs leading-relaxed"
-                    >
-                      {heading.description}
-                    </p>
-                  ) : null}
-                </div>
-                {pathState && !overviewMode ? (
+                {heading.crumbs ? (
+                  <div className="mb-6">
+                    <PathActionsBreadcrumb crumbs={heading.crumbs} onRevert={onBreadcrumbCrumb} />
+                    {heading.description ? (
+                      <p
+                        id="description"
+                        className="text-muted-foreground mt-2 text-xs leading-relaxed"
+                      >
+                        {heading.description}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {pathState && !overviewMode && !onTimeline ? (
                   <div className="mb-6 flex flex-wrap items-center gap-4 text-xs">
                     <div className="flex items-center gap-2">
                       <Switch
@@ -695,17 +795,38 @@ export function Explorer() {
                     })}
                   </div>
                 ) : null}
-                <RunCharts
-                  view={view}
-                  overview={stateIsOverview(pathState)}
-                  facets={chartFacets}
-                  overviewMetrics={chartOverview}
-                  loading={chartsLoading}
-                  error={chartsError}
-                  emptyMessage={null}
-                  onSelectBin={onSelectBin}
-                  onSelectRun={onSelectRun}
-                />
+                {timelineRunId ? (
+                  <TimelineScrubber
+                    runId={timelineRunId}
+                    chart={tipState.timelineChart}
+                    onOpenPattern={(runId, nodeId) => {
+                      const sel: SelectionContext = {
+                        runId,
+                        binKey: String(nodeId),
+                        patternId: nodeId,
+                      };
+                      void applyFollowup("select_bin", sel)
+                        .then(async (selected) => {
+                          await applyFollowup("open_pattern_detail", sel, selected.plan);
+                        })
+                        .catch(() => {
+                          /* follow-up failed */
+                        });
+                    }}
+                  />
+                ) : (
+                  <RunCharts
+                    view={view}
+                    overview={stateIsOverview(pathState)}
+                    facets={chartFacets}
+                    overviewMetrics={chartOverview}
+                    loading={chartsLoading}
+                    error={chartsError}
+                    emptyMessage={null}
+                    onSelectBin={onSelectBin}
+                    onSelectRun={onSelectRun}
+                  />
+                )}
                 <p id="query-status" className="text-muted-foreground mt-3 text-xs">
                   {queryStatus}
                 </p>
@@ -734,6 +855,23 @@ export function Explorer() {
                       : "Produce an experiment run, then refresh."}
                   </EmptyDescription>
                 </EmptyHeader>
+                {visibleFollowups.length ? (
+                  <div className="mb-4 flex flex-wrap justify-center gap-2">
+                    {visibleFollowups.map((name) => (
+                      <Button
+                        key={name}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void applyFollowup(name);
+                        }}
+                      >
+                        {morphismLabel(name)}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
                 {runs.length ? (
                   <div className="mt-2 flex max-w-lg flex-wrap justify-center gap-2">
                     {explorerStarterPresets.map((preset) => (
@@ -777,8 +915,8 @@ export function Explorer() {
               patternId: nodeId,
             };
             void applyFollowup("select_bin", sel)
-              .then(async () => {
-                await applyFollowup("open_pattern_detail", sel);
+              .then(async (selected) => {
+                await applyFollowup("open_pattern_detail", sel, selected.plan);
               })
               .catch(() => {
                 /* follow-up failed */

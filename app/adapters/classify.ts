@@ -55,6 +55,29 @@ export function rulesPick(question: string, legal: string[]): string | null {
   if (forced) return forced;
 
   const q = question.toLowerCase();
+
+  if (
+    has(legal, Morphism.openTimelineScrubber) &&
+    /\b(timeline|scrub|replay|live decode|events\.jsonl)\b/.test(q)
+  ) {
+    return Morphism.openTimelineScrubber;
+  }
+
+  if (
+    has(legal, Morphism.showTimelineGraph) &&
+    /\b(graph|transition|predict|next.?pattern)\b/.test(q)
+  ) {
+    return Morphism.showTimelineGraph;
+  }
+
+  if (has(legal, Morphism.showTimelineAccuracy) && /\b(accuracy|hit@|hit rate)\b/.test(q)) {
+    return Morphism.showTimelineAccuracy;
+  }
+
+  if (has(legal, Morphism.showTimelineLength) && /\b(length|span|pattern length)\b/.test(q)) {
+    return Morphism.showTimelineLength;
+  }
+
   const loads = legal.filter((n) => n.startsWith("load_"));
   if (loads.length > 1) {
     if (
@@ -119,11 +142,12 @@ export async function proposePathRules(
   question: string,
   catalogRuns: string[],
   hooks?: DecideHooks,
+  runHasEvents = false,
 ): Promise<DecideResponse> {
-  let state = initialPathState;
+  let state = { ...initialPathState, runHasEvents };
   const trace: DecideStep[] = [];
   for (let i = 0; i < MAX_LOOP; i++) {
-    if (state.tip === Tip.committed) break;
+    if (state.tip === Tip.committed || state.tip === Tip.timeline) break;
     const legal = enabledNames(state);
     if (legal.length === 0) break;
     const pick = rulesPick(question, legal);
@@ -134,9 +158,9 @@ export async function proposePathRules(
     const step = { id: pick, label: morphismLabel(pick) };
     trace.push(step);
     await hooks?.onStep?.(step);
-    if (pick === Morphism.commit) break;
+    if (pick === Morphism.commit || pick === Morphism.openTimelineScrubber) break;
   }
-  if (state.tip !== Tip.committed) {
+  if (state.tip !== Tip.committed && state.tip !== Tip.timeline) {
     return { plan: null, state: null, source: "rules", steps: trace };
   }
   const plan = materialize(state, catalogRuns);
@@ -154,14 +178,15 @@ export async function proposePathWithJev(
   question: string,
   catalogRuns: string[],
   hooks?: DecideHooks,
+  runHasEvents = false,
 ): Promise<DecideResponse> {
-  let state = initialPathState;
+  let state = { ...initialPathState, runHasEvents };
   const trace: DecideStep[] = [];
   let metrics = emptyMetrics();
   const history: PathStep[] = [];
 
   for (let i = 0; i < MAX_LOOP; i++) {
-    if (state.tip === Tip.committed) break;
+    if (state.tip === Tip.committed || state.tip === Tip.timeline) break;
     const legal = enabledNames(state);
     if (legal.length === 0) break;
 
@@ -198,19 +223,19 @@ export async function proposePathWithJev(
     metrics = addMetrics(metrics, stepMetrics);
     const picked = resolveChoiceLabel(answer, legal);
     if (!legal.includes(picked)) {
-      return proposePathRules(question, catalogRuns);
+      return proposePathRules(question, catalogRuns, undefined, runHasEvents);
     }
     const next = applyPath(state, picked);
-    if (!next.ok) return proposePathRules(question, catalogRuns);
+    if (!next.ok) return proposePathRules(question, catalogRuns, undefined, runHasEvents);
     state = next.state;
     history.push({ name: picked as PathStepName });
     const step = { id: picked, label: morphismLabel(picked) };
     trace.push(step);
     await hooks?.onStep?.(step);
-    if (picked === Morphism.commit) break;
+    if (picked === Morphism.commit || picked === Morphism.openTimelineScrubber) break;
   }
 
-  if (state.tip !== Tip.committed) {
+  if (state.tip !== Tip.committed && state.tip !== Tip.timeline) {
     return { plan: null, state: null, source: "jev", steps: trace, metrics };
   }
   return {

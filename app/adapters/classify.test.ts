@@ -58,4 +58,14 @@ describe("path policy rules", () => {
     });
     expect(seen).toEqual([Morphism.loadHub, Morphism.topK10, Morphism.commit]);
   });
+
+  test("timeline ask succeeds only with runHasEvents", async () => {
+    const blocked = await proposePathRules("show timeline scrub", ["a"], undefined, false);
+    expect(blocked.plan).toBeNull();
+
+    const opened = await proposePathRules("show timeline scrub", ["a"], undefined, true);
+    expect(opened.state?.tip).toBe("timeline");
+    expect(opened.plan?.steps).toEqual([]);
+    expect(opened.state?.timelineRequested).toBe(true);
+  });
 });
