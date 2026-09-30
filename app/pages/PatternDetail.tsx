@@ -11,6 +11,7 @@ import {
   formatPatternChain,
   patternDisplayLabel,
 } from "@/app/adapters/decode";
+import { VisualizationCard } from "@/app/components/VisualizationCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -233,49 +234,53 @@ function NeighborColumn({
   onOpen: (runId: string, nodeId: number) => void;
 }) {
   return (
-    <section className="min-w-0">
-      <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-2">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <small className="text-muted-foreground text-[10px]">
-          {group.count ?? 0} links · {number(group.total ?? 0)} weight
-        </small>
-      </div>
-      <div className="scroll-fade max-h-40 overflow-y-auto">
-        <div className="flex flex-col gap-0.5 pr-1">
-          {group.rows.length ? (
-            group.rows.map((row) => (
-              <Tooltip key={row.id}>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto w-full justify-between gap-2 px-2 py-1.5 font-normal"
-                      onClick={() => onOpen(runId, row.id)}
-                    />
-                  }
-                >
-                  <span className="truncate text-left">
-                    {patternDisplayLabel({ id: row.id, key: String(row.id), token: row.token })}
-                  </span>
-                  <span className="text-muted-foreground shrink-0 tabular-nums">
-                    {row.prob != null
-                      ? `${(row.prob * 100).toFixed(1)}% · ${number(row.weight)}`
-                      : number(row.weight)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-sm text-left whitespace-normal">
-                  {neighborTitle(row.token)}
-                </TooltipContent>
-              </Tooltip>
-            ))
-          ) : (
-            <p className="text-muted-foreground px-2 py-1 text-xs">No links.</p>
-          )}
+    <VisualizationCard size="sm">
+      <VisualizationCard.Header>
+        <VisualizationCard.Title>{title}</VisualizationCard.Title>
+        <VisualizationCard.Action>
+          <span className="text-muted-foreground text-[10px]">
+            {group.count ?? 0} links · {number(group.total ?? 0)} weight
+          </span>
+        </VisualizationCard.Action>
+      </VisualizationCard.Header>
+      <VisualizationCard.Content>
+        <div className="scroll-fade max-h-40 overflow-y-auto">
+          <div className="flex flex-col gap-0.5 pr-1">
+            {group.rows.length ? (
+              group.rows.map((row) => (
+                <Tooltip key={row.id}>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto w-full justify-between gap-2 px-2 py-1.5 font-normal"
+                        onClick={() => onOpen(runId, row.id)}
+                      />
+                    }
+                  >
+                    <span className="truncate text-left">
+                      {patternDisplayLabel({ id: row.id, key: String(row.id), token: row.token })}
+                    </span>
+                    <span className="text-muted-foreground shrink-0 tabular-nums">
+                      {row.prob != null
+                        ? `${(row.prob * 100).toFixed(1)}% · ${number(row.weight)}`
+                        : number(row.weight)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm text-left whitespace-normal">
+                    {neighborTitle(row.token)}
+                  </TooltipContent>
+                </Tooltip>
+              ))
+            ) : (
+              <p className="text-muted-foreground px-2 py-1 text-xs">No links.</p>
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </VisualizationCard.Content>
+    </VisualizationCard>
   );
 }
 

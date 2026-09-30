@@ -9,7 +9,7 @@ import {
 import { AlertCircleIcon, ChartColumnIcon } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { formatPatternBriefChain } from "@/app/adapters/decode";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { VisualizationCard } from "@/app/components/VisualizationCard";
 import {
   type ChartConfig,
   ChartContainer,
@@ -23,13 +23,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-
-const valueConfig = {
-  value: {
-    label: "Value",
-    color: "var(--chart-1)",
-  },
-} satisfies ChartConfig;
 
 type BinSelect = {
   runId: string;
@@ -87,16 +80,20 @@ export function RunCharts({
             <ChartColumnIcon />
           </EmptyMedia>
           <EmptyTitle>No chart yet</EmptyTitle>
-          <EmptyDescription>{emptyMessage ?? "Ask a question to compose a view."}</EmptyDescription>
+          <EmptyDescription>{emptyMessage ?? "Pick a view to load charts."}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
   }
   if (overview) {
     return (
-      <div id="charts" className="grid gap-4" aria-live="polite">
+      <div
+        id="charts"
+        className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))]"
+        aria-live="polite"
+      >
         {overviewMetrics.map((metric) => (
-          <OverviewMetricChart key={metric.key} metric={metric} onSelectRun={onSelectRun} />
+          <OverviewMetricCard key={metric.key} metric={metric} onSelectRun={onSelectRun} />
         ))}
       </div>
     );
@@ -135,12 +132,12 @@ function FacetBarChart({
     },
   } satisfies ChartConfig;
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{facet.title}</CardTitle>
-        <CardDescription className="text-[11px]">{facet.subtitle}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <VisualizationCard>
+      <VisualizationCard.Header>
+        <VisualizationCard.Title>{facet.title}</VisualizationCard.Title>
+        <VisualizationCard.Description>{facet.subtitle}</VisualizationCard.Description>
+      </VisualizationCard.Header>
+      <VisualizationCard.Content>
         <ChartContainer
           config={config}
           className="aspect-auto w-full"
@@ -243,82 +240,66 @@ function FacetBarChart({
             </Bar>
           </BarChart>
         </ChartContainer>
-        <p className="text-muted-foreground mt-2 text-[11px]">{facet.footer}</p>
-      </CardContent>
-    </Card>
+      </VisualizationCard.Content>
+      <VisualizationCard.Footer>{facet.footer}</VisualizationCard.Footer>
+    </VisualizationCard>
   );
 }
 
-function OverviewMetricChart({
+function OverviewMetricCard({
   metric,
   onSelectRun,
 }: {
   metric: OverviewMetricModel;
   onSelectRun: (runId: string) => void;
 }) {
-  const height = Math.max(120, 40 + metric.rows.length * 36);
+  const single = metric.rows.length === 1 ? metric.rows[0] : null;
+  const highlight = single ?? metric.rows.find((r) => r.selected) ?? metric.rows[0];
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{metric.label}</CardTitle>
-        <CardDescription className="text-[11px]">{metric.note}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
-          config={valueConfig}
-          className="aspect-auto w-full"
-          style={{ height }}
-          initialDimension={{ width: 520, height }}
-        >
-          <BarChart
-            accessibilityLayer
-            data={metric.rows}
-            layout="vertical"
-            margin={{ left: 4, right: 28, top: 4, bottom: 4 }}
-          >
-            <CartesianGrid horizontal={false} />
-            <XAxis type="number" domain={[0, metric.domainMax]} tickLine={false} axisLine={false} />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={118}
-              tickLine={false}
-              axisLine={false}
-              tick={{ fontSize: 11 }}
-            />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar
-              dataKey="value"
-              radius={4}
-              maxBarSize={14}
-              onClick={(data) => {
-                const row = data?.payload as { runId?: string } | undefined;
-                if (row?.runId) onSelectRun(row.runId);
-              }}
-            >
-              {metric.rows.map((row) => (
-                <Cell
-                  key={row.runId}
-                  cursor="pointer"
-                  fill={row.selected ? "var(--foreground)" : "var(--color-value)"}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+    <VisualizationCard size="sm">
+      <VisualizationCard.Header>
+        <VisualizationCard.Title className="text-muted-foreground font-normal">
+          {metric.label}
+        </VisualizationCard.Title>
+      </VisualizationCard.Header>
+      <VisualizationCard.Content>
+        <p className="text-2xl font-semibold tabular-nums tracking-tight">
+          {highlight ? formatChartValue(highlight.value, false) : "—"}
+        </p>
+        {single ? (
+          <p className="text-muted-foreground mt-1 text-xs">{metric.note}</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            <li className="text-muted-foreground text-[11px]">{metric.note}</li>
+            {metric.rows.map((row) => (
+              <li key={row.runId}>
+                <button
+                  type="button"
+                  className={`flex w-full items-baseline justify-between gap-2 text-left text-[11px] ${
+                    row.selected ? "text-foreground font-medium" : "text-muted-foreground"
+                  }`}
+                  onClick={() => onSelectRun(row.runId)}
+                >
+                  <span className="truncate font-mono text-[10px]">{row.label}</span>
+                  <span className="tabular-nums">{formatChartValue(row.value, false)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </VisualizationCard.Content>
+    </VisualizationCard>
   );
 }
 
-export function ContractInspect({ view, followups }: { view: View | null; followups: string[] }) {
+export function ContractInspect({ view }: { view: View | null }) {
   if (!view) {
     return <p className="text-muted-foreground text-xs">Waiting for query.</p>;
   }
   return (
     <div className="space-y-3 text-xs">
       <section>
-        <h4 className="mb-1 font-medium">Path</h4>
+        <h4 className="mb-1 font-medium">Plan</h4>
         <pre className="bg-muted overflow-x-auto rounded-md p-3 text-[11px] leading-relaxed whitespace-pre-wrap">
           {JSON.stringify(view.plan, null, 2)}
         </pre>
@@ -327,12 +308,6 @@ export function ContractInspect({ view, followups }: { view: View | null; follow
         <h4 className="mb-1 font-medium">SQL</h4>
         <pre className="bg-muted overflow-x-auto rounded-md p-3 text-[11px] leading-relaxed whitespace-pre-wrap">
           {view.facets[0]?.sql ?? "No query"}
-        </pre>
-      </section>
-      <section>
-        <h4 className="mb-1 font-medium">Enabled follow-ups</h4>
-        <pre className="bg-muted overflow-x-auto rounded-md p-3 text-[11px] leading-relaxed whitespace-pre-wrap">
-          {JSON.stringify(followups, null, 2)}
         </pre>
       </section>
       <section>
