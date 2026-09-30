@@ -1,23 +1,7 @@
-import {
-  applyPath,
-  compilePlan,
-  type DisplaySpec,
-  initialPathState,
-  Morphism,
-  type PathPlan,
-  presetPaths,
-  sessionFromPathState,
-  withDisplay,
-} from "@workstream/lattice-viz";
+import type { ChartKind, ChartMeasure, ChartQuery } from "@/app/viz/chart-query";
+import type { DisplaySpec } from "@/app/viz/types";
 
 export type ExplorerViewId = "lattice" | "connectivity" | "replay";
-
-/** Load morphisms legal for length drill plans. */
-export type PatternLoadMorphism =
-  | typeof Morphism.loadPatternMass
-  | typeof Morphism.loadEdgeWeight
-  | typeof Morphism.loadInDegree
-  | typeof Morphism.loadHub;
 
 /** Connectivity measure axis (outgoing / incoming / hub). */
 export type ConnMeasureId = "outgoing" | "incoming" | "hub";
@@ -25,36 +9,13 @@ export type ConnMeasureId = "outgoing" | "incoming" | "hub";
 export type ConnMeasureSpec = {
   id: ConnMeasureId;
   label: string;
-  /** Pattern top-k preset. */
-  topPreset: keyof typeof presetPaths;
-  /** Length-histogram preset. */
-  lengthPreset: keyof typeof presetPaths;
-  /** Load morphism for length drills. */
-  load: PatternLoadMorphism;
+  measure: ChartMeasure;
 };
 
 export const CONN_MEASURES: ConnMeasureSpec[] = [
-  {
-    id: "outgoing",
-    label: "Outgoing",
-    topPreset: "connectivity",
-    lengthPreset: "lengths-by-edge",
-    load: Morphism.loadEdgeWeight,
-  },
-  {
-    id: "incoming",
-    label: "Incoming",
-    topPreset: "inflows",
-    lengthPreset: "lengths-by-in",
-    load: Morphism.loadInDegree,
-  },
-  {
-    id: "hub",
-    label: "Hub",
-    topPreset: "hubs",
-    lengthPreset: "lengths-by-hub",
-    load: Morphism.loadHub,
-  },
+  { id: "outgoing", label: "Outgoing", measure: "outgoing" },
+  { id: "incoming", label: "Incoming", measure: "incoming" },
+  { id: "hub", label: "Hub", measure: "hub" },
 ];
 
 export function connMeasure(id: ConnMeasureId): ConnMeasureSpec {
@@ -66,8 +27,9 @@ export function connMeasure(id: ConnMeasureId): ConnMeasureSpec {
 export type ChartSpec = {
   id: string;
   title: string;
-  /** Default preset when there is no measure picker (or lattice mass). */
-  preset: keyof typeof presetPaths;
+  kind: Exclude<ChartKind, "lengthDrill">;
+  /** Default measure when there is no measure picker. */
+  measure?: ChartMeasure;
   /** Run-scalar overview chart (multi-run by default). */
   overview?: boolean;
   /**
@@ -78,7 +40,7 @@ export type ChartSpec = {
   /** Connectivity measure select (Outgoing / Incoming / Hub). */
   measurePicker?: boolean;
   /**
-   * Histogram of the active measure by length (uses measure.lengthPreset).
+   * Histogram of the active measure by length.
    * Mutual with lengthPicker on Connectivity.
    */
   lengthHistogram?: boolean;
@@ -98,9 +60,15 @@ export const CATEGORY_VIEWS: Record<Exclude<ExplorerViewId, "replay">, CategoryV
     title: "Lattice",
     description: "Where is the mass?",
     charts: [
-      { id: "overview", title: "Run scalars", preset: "overview", overview: true },
-      { id: "patterns", title: "Top patterns", preset: "patterns", lengthPicker: true },
-      { id: "lengths", title: "Mass by length", preset: "lengths" },
+      { id: "overview", title: "Run scalars", kind: "overview", overview: true },
+      {
+        id: "patterns",
+        title: "Top patterns",
+        kind: "topPatterns",
+        measure: "mass",
+        lengthPicker: true,
+      },
+      { id: "lengths", title: "Mass by length", kind: "byLength", measure: "mass" },
     ],
   },
   connectivity: {
@@ -111,14 +79,16 @@ export const CATEGORY_VIEWS: Record<Exclude<ExplorerViewId, "replay">, CategoryV
       {
         id: "patterns",
         title: "Top patterns",
-        preset: "connectivity",
+        kind: "topPatterns",
+        measure: "outgoing",
         lengthPicker: true,
         measurePicker: true,
       },
       {
         id: "lengths",
         title: "Weight by length",
-        preset: "lengths-by-edge",
+        kind: "byLength",
+        measure: "outgoing",
         measurePicker: true,
         lengthHistogram: true,
       },
@@ -148,72 +118,60 @@ export const EXPLORER_VIEWS: {
   },
 ];
 
-/** Resolve the executable preset for a chart given optional connectivity measure. */
-export function resolveChartPreset(
+/** Resolve the chart measure for a spec given optional connectivity measure. */
+export function resolveChartMeasure(
   spec: ChartSpec,
   measureId: ConnMeasureId = "outgoing",
-): keyof typeof presetPaths {
-  if (!spec.measurePicker) return spec.preset;
-  const m = connMeasure(measureId);
-  return spec.lengthHistogram ? m.lengthPreset : m.topPreset;
+): ChartMeasure {
+  if (spec.measurePicker) return connMeasure(measureId).measure;
+  return spec.measure ?? "mass";
 }
 
-/** Build an executable PathPlan from a named preset + display knobs. */
-export function buildChartPlan(
-  presetId: keyof typeof presetPaths,
+function runsForDisplay(
   display: DisplaySpec,
   catalogRuns: string[],
   selectedRunId: string,
-): PathPlan {
-  const steps = presetPaths[presetId];
-  if (!steps?.length) throw new Error(`Unknown preset: ${String(presetId)}`);
-  let state = initialPathState;
-  for (const step of steps) {
-    const next = applyPath(state, step.name, step.params);
-    if (!next.ok) throw new Error(next.error);
-    state = next.state;
-  }
-  let session = sessionFromPathState(state, catalogRuns, selectedRunId);
-  session = withDisplay(session, display);
-  const plan = compilePlan(session);
+): string[] {
+  if (display.faceted) return catalogRuns;
+  return selectedRunId ? [selectedRunId] : catalogRuns.slice(0, 1);
+}
+
+/** Build a ChartQuery from a fixed chart spec + display knobs. */
+export function buildChartQuery(
+  spec: ChartSpec,
+  display: DisplaySpec,
+  catalogRuns: string[],
+  selectedRunId: string,
+  measureId: ConnMeasureId = "outgoing",
+): ChartQuery {
+  const runs =
+    spec.kind === "overview" || spec.overview
+      ? catalogRuns
+      : runsForDisplay(display, catalogRuns, selectedRunId);
   return {
-    ...plan,
-    steps: plan.steps.map((step) =>
-      step.name === Morphism.partitionByLength
-        ? { ...step, params: { ...step.params, limit: display.limit } }
-        : step,
-    ),
+    runs,
+    kind: spec.kind,
+    measure: resolveChartMeasure(spec, measureId),
+    limit: display.limit,
+    normalize: display.normalized,
   };
 }
 
-/**
- * Top patterns for one composite length:
- * load → rollup length → commit → drill_length_patterns.
- */
-export function buildLengthPatternsPlan(
+/** Top patterns for one composite length. */
+export function buildLengthDrillQuery(
   lengthKey: string,
   display: DisplaySpec,
   catalogRuns: string[],
   selectedRunId: string,
-  load: PatternLoadMorphism = Morphism.loadPatternMass,
-): PathPlan {
+  measure: ChartMeasure = "mass",
+): ChartQuery {
   if (!lengthKey) throw new Error("lengthKey is required.");
-  let state = initialPathState;
-  for (const name of [load, Morphism.rollupLength, Morphism.commit] as const) {
-    const next = applyPath(state, name);
-    if (!next.ok) throw new Error(next.error);
-    state = next.state;
-  }
-  const drilled = applyPath(state, Morphism.drillLengthPatterns, {
+  return {
+    runs: runsForDisplay(display, catalogRuns, selectedRunId),
+    kind: "lengthDrill",
+    measure,
+    limit: display.limit,
+    normalize: display.normalized,
     lengthKey,
-    limit: display.limit,
-  });
-  if (!drilled.ok) throw new Error(drilled.error);
-  state = drilled.state;
-  let session = sessionFromPathState(state, catalogRuns, selectedRunId);
-  session = withDisplay(session, {
-    ...display,
-    limit: display.limit,
-  });
-  return compilePlan(session);
+  };
 }

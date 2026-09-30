@@ -1,5 +1,5 @@
-import type { DisplaySpec } from "@workstream/lattice-viz";
 import type { ExplorerViewId } from "@/app/views";
+import type { DisplaySpec } from "@/app/viz";
 
 /** Lightweight explorer UI state — no morphism tip machine. */
 export type ExplorerSession = {

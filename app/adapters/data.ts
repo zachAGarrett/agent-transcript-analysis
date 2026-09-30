@@ -1,28 +1,11 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, realpathSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import type {
-  Bin,
-  Facet,
-  PathPlan,
-  PatternDetail,
-  PatternLinks,
-  PatternStep,
-  Run,
-  View,
-} from "@workstream/lattice-viz";
-import {
-  canLowerToSql,
-  compilePath,
-  IrMeasure,
-  interpretSummary,
-  Morphism,
-  optimizeIR,
-  planIsOverview,
-} from "@workstream/lattice-viz";
-import { decodePatternSteps, patternDisplayLabel } from "./decode";
-import { readDecodeSummary } from "./decode-traces";
-import { lowerToSqlite, rowsToBins } from "./sqlite-plan";
+import type { ChartQuery } from "@/app/viz/chart-query";
+import { patternDisplayLabel } from "@/app/viz/labels";
+import type { Facet, PatternDetail, PatternLinks, PatternStep, Run, View } from "@/app/viz/types";
+import { decodePatternSteps } from "./decode";
+import { planForQuery, rowsToBins, totalForMeasure, unitForMeasure } from "./sqlite-plan";
 
 export type { Facet, PatternDetail, PatternLinks, Run, View };
 
@@ -30,41 +13,6 @@ const summarySql = `SELECT count(*) nodes, coalesce(sum(token_count),0) mass,
   coalesce(sum(hub_score),0) hubScore, coalesce(sum(hub_score != 0),0) scored FROM nodes`;
 const edgesSql = `SELECT count(*) edges, coalesce(sum(weight),0) edgeWeight,
   coalesce(max(weight),0) maxWeight FROM edges`;
-
-const loadSql: Record<string, string> = {
-  [Morphism.loadPatternMass]: "SELECT id, token, token_count value FROM nodes",
-  [Morphism.loadPatternVocab]: "SELECT id, token, token_count value FROM nodes",
-  [Morphism.loadHub]: "SELECT id, token, hub_score value FROM nodes",
-  [Morphism.loadEdgeWeight]: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
-LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e
-ON e.from_id = n.id`,
-  [Morphism.loadInDegree]: `SELECT n.id, n.token, coalesce(e.value,0) value FROM nodes n
-LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e
-ON e.to_id = n.id`,
-};
-
-function loadStepSql(plan: PathPlan): string {
-  const load = plan.steps.find((s) => s.name.startsWith("load_"));
-  const sql = loadSql[load?.name ?? ""];
-  return sql ?? "SELECT id, token, token_count value FROM nodes";
-}
-
-function totalForMeasure(measure: string, run: Run): number {
-  if (measure === IrMeasure.vocabulary) return run.nodes;
-  if (measure === IrMeasure.hubScore) return run.hubScore;
-  if (measure === IrMeasure.edgeWeight || measure === IrMeasure.inEdgeWeight) return run.edgeWeight;
-  return run.mass;
-}
-
-function unitForMeasure(measure: string): string {
-  if (measure === IrMeasure.vocabulary) return "patterns";
-  if (measure === IrMeasure.hubScore) return "hub score";
-  if (measure === IrMeasure.edgeWeight) return "outgoing edge weight";
-  if (measure === IrMeasure.inEdgeWeight) return "incoming edge weight";
-  if (measure === IrMeasure.decodeSpan) return "decode steps";
-  if (measure === IrMeasure.decodeFallback) return "rate";
-  return "stored counts";
-}
 
 export class RunStore {
   readonly root: string;
@@ -196,72 +144,19 @@ export class RunStore {
     return { runs, errors };
   }
 
-  async view(plan: PathPlan): Promise<View> {
-    // A single request is bounded. Changes during querying are retried; facets are never pooled.
+  async query(chartQuery: ChartQuery): Promise<View> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const versions = plan.runs.map((id) => this.version(id));
-      const key = JSON.stringify([plan, versions]);
+      const versions = chartQuery.runs.map((id) => this.version(id));
+      const key = JSON.stringify([chartQuery, versions]);
       const cached = this.cache.get(key);
       if (cached) return { ...cached, cacheHit: true };
+
       const facets: Facet[] = [];
-      const isOverview = planIsOverview(plan);
-      const { ir } = compilePath(plan.steps);
-      const optimized = optimizeIR(ir);
-      const loadOp = optimized.ops.find((o) => o.op === "load");
-      const decodeLoad =
-        loadOp &&
-        "measure" in loadOp &&
-        (loadOp.measure === IrMeasure.decodeSpan || loadOp.measure === IrMeasure.decodeFallback);
-      const sqlitePlan =
-        !isOverview && !decodeLoad && canLowerToSql(optimized) ? lowerToSqlite(optimized) : null;
-      const fallbackSql = loadStepSql(plan);
-      for (const id of plan.runs) {
+      const isOverview = chartQuery.kind === "overview";
+      const sqlitePlan = isOverview ? null : planForQuery(chartQuery);
+
+      for (const id of chartQuery.runs) {
         const run = await this.run(id);
-        if (decodeLoad && loadOp && "measure" in loadOp) {
-          const summary = await readDecodeSummary(this.root, id);
-          if (!summary) {
-            facets.push({
-              run,
-              bins: [],
-              total: 0,
-              unit: unitForMeasure(loadOp.measure),
-              sql: "-- missing decode-summary.json",
-            });
-            continue;
-          }
-          let bins: Bin[];
-          let total: number;
-          if (loadOp.measure === IrMeasure.decodeSpan) {
-            bins = summary.spanLengthBins.map((b) => ({
-              key: b.key,
-              label: b.label,
-              value: b.value,
-              token: b.key,
-            }));
-            total = bins.reduce((s, b) => s + b.value, 0);
-          } else {
-            const atomic = summary.fallbackRate;
-            bins = [
-              { key: "atomic", label: "Atomic fallback", value: atomic },
-              { key: "multi", label: "Multi-symbol", value: Math.max(0, 1 - atomic) },
-            ];
-            total = 1;
-          }
-          const interpreted = interpretSummary(plan.steps, bins, {
-            mass: total,
-            nodes: bins.length,
-            edgeWeight: total,
-            hubScore: total,
-          });
-          facets.push({
-            run,
-            bins: interpreted.bins,
-            total: interpreted.total,
-            unit: interpreted.unit || unitForMeasure(loadOp.measure),
-            sql: "-- decode-summary.json",
-          });
-          continue;
-        }
         facets.push(
           this.read(id, (db) => {
             if (isOverview) {
@@ -273,68 +168,55 @@ export class RunStore {
                 sql: `${summarySql};\n${edgesSql};`,
               };
             }
-            const totals = {
-              mass: run.mass,
-              nodes: run.nodes,
-              edgeWeight: run.edgeWeight,
-              hubScore: run.hubScore,
-            };
-
-            if (sqlitePlan) {
-              const rows = db
-                .query<
-                  { id: number; token: string; value: number; len_key?: number },
-                  (string | number)[]
-                >(sqlitePlan.sql)
-                .all(...sqlitePlan.params);
-              let bins = rowsToBins(rows, sqlitePlan.kind, patternDisplayLabel);
-              const total = totalForMeasure(sqlitePlan.measure, run);
-              if (
-                sqlitePlan.limit != null &&
-                (sqlitePlan.kind === "patterns" || sqlitePlan.kind === "lengths")
-              ) {
-                const shown = bins.reduce((s, b) => s + b.value, 0);
-                const remainder = total - shown;
-                if (remainder > 1e-7) {
-                  bins = [...bins, { key: "other", label: "All other patterns", value: remainder }];
-                }
-              }
-              return {
-                run,
-                bins,
-                total,
-                unit: unitForMeasure(sqlitePlan.measure),
-                sql: sqlitePlan.sql,
-              };
-            }
-
+            if (!sqlitePlan) throw new Error("Missing SQL plan.");
             const rows = db
-              .query<{ id: number; token: string; value: number }, []>(fallbackSql)
-              .all();
-            const patternBins: Bin[] = rows.map((row) => ({
-              key: String(row.id),
-              label: patternDisplayLabel({
-                id: row.id,
-                key: String(row.id),
-                token: row.token,
-              }),
-              value: row.value,
-              id: row.id,
-              token: row.token,
-            }));
-            const interpreted = interpretSummary(plan.steps, patternBins, totals);
+              .query<
+                { id: number; token: string; value: number; len_key?: number },
+                (string | number)[]
+              >(sqlitePlan.sql)
+              .all(...sqlitePlan.params);
+            let bins = rowsToBins(rows, sqlitePlan.kind, patternDisplayLabel);
+            let total = totalForMeasure(sqlitePlan.measure, run);
+            if (
+              sqlitePlan.kind === "filterLength" &&
+              sqlitePlan.totalSql &&
+              sqlitePlan.totalParams
+            ) {
+              const row = db
+                .query<{ total: number }, (string | number)[]>(sqlitePlan.totalSql)
+                .get(...sqlitePlan.totalParams);
+              total = row?.total ?? 0;
+            }
+            if (
+              sqlitePlan.limit != null &&
+              (sqlitePlan.kind === "patterns" || sqlitePlan.kind === "filterLength")
+            ) {
+              const shown = bins.reduce((s, b) => s + b.value, 0);
+              const remainder = total - shown;
+              if (remainder > 1e-7) {
+                bins = [...bins, { key: "other", label: "All other patterns", value: remainder }];
+              }
+            }
             return {
               run,
-              bins: interpreted.bins,
-              total: interpreted.total,
-              unit: interpreted.unit,
-              sql: interpreted.sql,
+              bins,
+              total,
+              unit: unitForMeasure(sqlitePlan.measure),
+              sql: sqlitePlan.sql,
             };
           }),
         );
       }
-      if (versions.some((version, i) => version !== this.version(plan.runs[i] as string))) continue;
-      const result = { plan, facets, generatedAt: new Date().toISOString(), cacheHit: false };
+
+      if (versions.some((version, i) => version !== this.version(chartQuery.runs[i] as string))) {
+        continue;
+      }
+      const result: View = {
+        query: chartQuery,
+        facets,
+        generatedAt: new Date().toISOString(),
+        cacheHit: false,
+      };
       if (this.cache.size >= 64) this.cache.delete(this.cache.keys().next().value as string);
       this.cache.set(key, result);
       return result;

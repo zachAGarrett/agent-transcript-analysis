@@ -1,4 +1,4 @@
-import type { PatternAtom, PatternStep } from "@workstream/lattice-viz";
+import type { PatternAtom, PatternStep } from "@/app/viz";
 import { splitComposite } from "../../fixtures/encoders";
 import { decode as decodeV1 } from "../../fixtures/v1/decoder";
 import { taxonomy as taxonomyV1 } from "../../fixtures/v1/taxonomy";

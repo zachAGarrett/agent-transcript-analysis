@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Morphism } from "@workstream/lattice-viz";
 import {
-  buildChartPlan,
-  buildLengthPatternsPlan,
+  buildChartQuery,
+  buildLengthDrillQuery,
   CATEGORY_VIEWS,
   CONN_MEASURES,
   EXPLORER_VIEWS,
-  resolveChartPreset,
+  resolveChartMeasure,
 } from "./views";
 
 describe("fixed category views", () => {
@@ -30,89 +29,90 @@ describe("fixed category views", () => {
     expect(CONN_MEASURES.map((m) => m.id)).toEqual(["outgoing", "incoming", "hub"]);
   });
 
-  test("resolveChartPreset maps connectivity measure to presets", () => {
+  test("resolveChartMeasure maps connectivity measure", () => {
     const patterns = CATEGORY_VIEWS.connectivity.charts.find((c) => c.id === "patterns");
     const lengths = CATEGORY_VIEWS.connectivity.charts.find((c) => c.id === "lengths");
     expect(patterns).toBeDefined();
     expect(lengths).toBeDefined();
     if (!patterns || !lengths) return;
-    expect(resolveChartPreset(patterns, "outgoing")).toBe("connectivity");
-    expect(resolveChartPreset(patterns, "incoming")).toBe("inflows");
-    expect(resolveChartPreset(patterns, "hub")).toBe("hubs");
-    expect(resolveChartPreset(lengths, "outgoing")).toBe("lengths-by-edge");
-    expect(resolveChartPreset(lengths, "incoming")).toBe("lengths-by-in");
-    expect(resolveChartPreset(lengths, "hub")).toBe("lengths-by-hub");
+    expect(resolveChartMeasure(patterns, "outgoing")).toBe("outgoing");
+    expect(resolveChartMeasure(patterns, "incoming")).toBe("incoming");
+    expect(resolveChartMeasure(patterns, "hub")).toBe("hub");
+    expect(resolveChartMeasure(lengths, "outgoing")).toBe("outgoing");
   });
 
-  test("buildChartPlan applies display knobs to patterns preset", () => {
-    const plan = buildChartPlan(
-      "patterns",
+  test("buildChartQuery applies display knobs to patterns", () => {
+    const spec = CATEGORY_VIEWS.lattice.charts.find((c) => c.id === "patterns");
+    expect(spec).toBeDefined();
+    if (!spec) return;
+    const query = buildChartQuery(
+      spec,
       { limit: 20, normalized: true, faceted: true },
       ["a", "b"],
       "a",
     );
-    expect(plan.runs).toEqual(["a", "b"]);
-    expect(plan.steps.map((s) => s.name)).toEqual([
-      Morphism.loadPatternMass,
-      Morphism.topK20,
-      Morphism.normalize,
-      Morphism.facetRuns,
-      Morphism.commit,
-    ]);
+    expect(query).toMatchObject({
+      runs: ["a", "b"],
+      kind: "topPatterns",
+      measure: "mass",
+      limit: 20,
+      normalize: true,
+    });
   });
 
-  test("buildLengthPatternsPlan drills one length with display limit", () => {
-    const plan = buildLengthPatternsPlan(
+  test("buildLengthDrillQuery drills one length with display limit", () => {
+    const query = buildLengthDrillQuery(
       "2",
       { limit: 5, normalized: false, faceted: false },
       ["a"],
       "a",
     );
-    expect(plan.steps.map((s) => s.name)).toEqual([
-      Morphism.loadPatternMass,
-      Morphism.rollupLength,
-      Morphism.commit,
-      Morphism.drillLengthPatterns,
-    ]);
-    const drill = plan.steps.at(-1);
-    expect(drill?.params?.lengthKey).toBe("2");
-    expect(drill?.params?.limit).toBe(5);
+    expect(query).toMatchObject({
+      kind: "lengthDrill",
+      measure: "mass",
+      lengthKey: "2",
+      limit: 5,
+      runs: ["a"],
+    });
   });
 
-  test("buildLengthPatternsPlan accepts edge-weight load", () => {
-    const plan = buildLengthPatternsPlan(
+  test("buildLengthDrillQuery accepts edge-weight measure", () => {
+    const query = buildLengthDrillQuery(
       "1",
       { limit: 10, normalized: false, faceted: false },
       ["a"],
       "a",
-      Morphism.loadEdgeWeight,
+      "outgoing",
     );
-    expect(plan.steps[0]?.name).toBe(Morphism.loadEdgeWeight);
-    expect(plan.steps.at(-1)?.params?.lengthKey).toBe("1");
+    expect(query.measure).toBe("outgoing");
+    expect(query.lengthKey).toBe("1");
   });
 
-  test("buildChartPlan patches partition_by_length limit", () => {
-    const plan = buildChartPlan(
-      "patterns-by-length",
-      { limit: 5, normalized: false, faceted: false },
-      ["a"],
-      "a",
-    );
-    const partition = plan.steps.find((s) => s.name === Morphism.partitionByLength);
-    expect(partition?.params?.limit).toBe(5);
-  });
-
-  test("lengths-by-in preset exists", () => {
-    const plan = buildChartPlan(
-      "lengths-by-in",
+  test("buildChartQuery for byLength incoming", () => {
+    const lengths = CATEGORY_VIEWS.connectivity.charts.find((c) => c.id === "lengths");
+    expect(lengths).toBeDefined();
+    if (!lengths) return;
+    const query = buildChartQuery(
+      lengths,
       { limit: 10, normalized: false, faceted: false },
       ["a"],
       "a",
+      "incoming",
     );
-    expect(plan.steps.map((s) => s.name)).toEqual([
-      Morphism.loadInDegree,
-      Morphism.rollupLength,
-      Morphism.commit,
-    ]);
+    expect(query).toMatchObject({ kind: "byLength", measure: "incoming", runs: ["a"] });
+  });
+
+  test("buildChartQuery overview uses catalogRuns when not faceted", () => {
+    const overview = CATEGORY_VIEWS.lattice.charts.find((c) => c.id === "overview");
+    expect(overview).toBeDefined();
+    if (!overview) return;
+    const query = buildChartQuery(
+      overview,
+      { limit: 10, normalized: false, faceted: false },
+      ["a", "b", "c"],
+      "a",
+    );
+    expect(query.runs).toEqual(["a", "b", "c"]);
+    expect(query.kind).toBe("overview");
   });
 });

@@ -1,12 +1,3 @@
-import {
-  facetChartModels,
-  Morphism,
-  overviewMetricModels,
-  planIsOverview,
-  planNormalized,
-  type Run,
-  type View,
-} from "@workstream/lattice-viz";
 import { ChevronRightIcon, DatabaseIcon, RefreshCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContractInspect, RunCharts } from "@/app/components/RunCharts";
@@ -18,18 +9,16 @@ import {
   setView,
 } from "@/app/session/explorer";
 import {
-  buildChartPlan,
-  buildLengthPatternsPlan,
+  buildChartQuery,
+  buildLengthDrillQuery,
   CATEGORY_VIEWS,
-  type ChartSpec,
   CONN_MEASURES,
   type ConnMeasureId,
-  connMeasure,
   EXPLORER_VIEWS,
   type ExplorerViewId,
-  type PatternLoadMorphism,
-  resolveChartPreset,
+  resolveChartMeasure,
 } from "@/app/views";
+import { chartGrain, facetChartModels, overviewMetricModels, type Run, type View } from "@/app/viz";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -75,11 +64,6 @@ type ChartSlot = {
 };
 
 type DetailOpen = { runId: string; nodeId: number };
-
-function loadForPatterns(spec: ChartSpec, measureId: ConnMeasureId): PatternLoadMorphism {
-  if (spec.measurePicker) return connMeasure(measureId).load;
-  return Morphism.loadPatternMass;
-}
 
 export function Explorer() {
   const [runs, setRuns] = useState<Run[]>([]);
@@ -176,10 +160,9 @@ export function Explorer() {
             };
           }
           try {
-            const preset = resolveChartPreset(spec, connMeasureId);
-            const plan = buildChartPlan(preset, display, catalogRuns, selectedRunId);
+            const query = buildChartQuery(spec, display, catalogRuns, selectedRunId, connMeasureId);
             const view = await api<View>(
-              `/api/view?plan=${encodeURIComponent(JSON.stringify(plan))}`,
+              `/api/view?query=${encodeURIComponent(JSON.stringify(query))}`,
             );
             return {
               id: spec.id,
@@ -224,23 +207,18 @@ export function Explorer() {
           const spec = category.charts.find((c) => c.id === slot.id);
           if (!spec) return { ...slot, loading: false, error: "Unknown chart." };
           try {
-            const plan =
+            const query =
               lengthKey === LENGTH_ALL || !lengthKey
-                ? buildChartPlan(
-                    resolveChartPreset(spec, connMeasureId),
-                    display,
-                    catalogRuns,
-                    selectedRunId,
-                  )
-                : buildLengthPatternsPlan(
+                ? buildChartQuery(spec, display, catalogRuns, selectedRunId, connMeasureId)
+                : buildLengthDrillQuery(
                     lengthKey,
                     display,
                     catalogRuns,
                     selectedRunId,
-                    loadForPatterns(spec, connMeasureId),
+                    resolveChartMeasure(spec, connMeasureId),
                   );
             const view = await api<View>(
-              `/api/view?plan=${encodeURIComponent(JSON.stringify(plan))}`,
+              `/api/view?query=${encodeURIComponent(JSON.stringify(query))}`,
             );
             return { ...slot, view, loading: false, error: null };
           } catch (err) {
@@ -551,10 +529,10 @@ function ChartPanel({
   }) => void;
   onSelectRun: (runId: string) => void;
 }) {
-  const overview = slot.view ? planIsOverview(slot.view.plan) : false;
+  const overview = slot.view?.query.kind === "overview";
   const facets = useMemo(() => {
     if (!slot.view || overview) return [];
-    return facetChartModels(slot.view, planNormalized(slot.view.plan), null, null);
+    return facetChartModels(slot.view, slot.view.query.normalize, chartGrain(slot.view.query.kind));
   }, [slot.view, overview]);
   const overviewMetrics = useMemo(() => {
     if (!slot.view || !overview) return [];

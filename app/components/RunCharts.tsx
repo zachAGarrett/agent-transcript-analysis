@@ -1,3 +1,7 @@
+import { AlertCircleIcon, ChartColumnIcon } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { formatPatternBriefChain } from "@/app/adapters/decode";
+import { VisualizationCard } from "@/app/components/VisualizationCard";
 import {
   type FacetChartModel,
   type FacetChartRow,
@@ -5,11 +9,7 @@ import {
   type OverviewMetricModel,
   stamp,
   type View,
-} from "@workstream/lattice-viz";
-import { AlertCircleIcon, ChartColumnIcon } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import { formatPatternBriefChain } from "@/app/adapters/decode";
-import { VisualizationCard } from "@/app/components/VisualizationCard";
+} from "@/app/viz";
 import {
   type ChartConfig,
   ChartContainer,
@@ -299,9 +299,9 @@ export function ContractInspect({ view }: { view: View | null }) {
   return (
     <div className="space-y-3 text-xs">
       <section>
-        <h4 className="mb-1 font-medium">Plan</h4>
+        <h4 className="mb-1 font-medium">Query</h4>
         <pre className="bg-muted overflow-x-auto rounded-md p-3 text-[11px] leading-relaxed whitespace-pre-wrap">
-          {JSON.stringify(view.plan, null, 2)}
+          {JSON.stringify(view.query, null, 2)}
         </pre>
       </section>
       <section>

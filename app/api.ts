@@ -3,8 +3,8 @@
  * the HTML entry module — Bun's browser bundler would then see bun:sqlite.
  */
 import "./adapters";
-import { parsePathPlan } from "@workstream/lattice-viz";
 import { defaultRoot, RunStore } from "./adapters";
+import { parseChartQuery } from "./viz/chart-query";
 
 const store = new RunStore(process.env.EXPLORER_RUNS ?? defaultRoot);
 
@@ -14,14 +14,14 @@ export async function handleApi(request: Request): Promise<Response> {
     let result: unknown;
     if (url.pathname === "/api/runs") result = await store.catalog();
     else if (url.pathname === "/api/view") {
-      const input = url.searchParams.get("plan") ?? "";
-      if (input.length > 8192) throw new Error("Plan too large.");
+      const input = url.searchParams.get("query") ?? url.searchParams.get("plan") ?? "";
+      if (input.length > 8192) throw new Error("Query too large.");
       const { runs } = await store.catalog();
-      const { plan } = parsePathPlan(
+      const chartQuery = parseChartQuery(
         JSON.parse(input),
         runs.map((r) => r.id),
       );
-      result = await store.view(plan);
+      result = await store.query(chartQuery);
     } else if (url.pathname === "/api/pattern") {
       const node = Number(url.searchParams.get("node"));
       if (!Number.isSafeInteger(node) || node < 1) throw new Error("Invalid pattern ID.");

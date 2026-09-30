@@ -1,8 +1,3 @@
-import type {
-  PatternDetail as PatternDetailData,
-  PatternNeighbor,
-  Run,
-} from "@workstream/lattice-viz";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -12,6 +7,7 @@ import {
   patternDisplayLabel,
 } from "@/app/adapters/decode";
 import { VisualizationCard } from "@/app/components/VisualizationCard";
+import type { PatternDetail as PatternDetailData, PatternNeighbor, Run } from "@/app/viz";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";

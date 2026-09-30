@@ -1,118 +1,87 @@
-import type { Bin, ExecutionIR, IrOp, MeasureKind } from "@workstream/lattice-viz";
-import { IrMeasure, IrOpKind, TopKBy } from "@workstream/lattice-viz";
+import type { ChartMeasure, ChartQuery } from "@/app/viz/chart-query";
+import type { Bin } from "@/app/viz/types";
 
-/** Pipe-count length capped at 32 — must match patternLengthKey. */
+/** Pipe-count length capped at 32 — must match patternLengthKey in charts. */
 export const LENGTH_SQL = `MIN(32, LENGTH(token) - LENGTH(REPLACE(token, '|', '')))`;
 
 export type SqlitePlan = {
   sql: string;
   params: (string | number)[];
-  /** How to map rows into bins; residual assembled by caller using totals. */
-  kind: "patterns" | "lengths" | "partition" | "filterLength";
+  kind: "patterns" | "lengths" | "filterLength";
   limit?: number;
   lengthKey?: string;
-  measure: MeasureKind;
+  measure: ChartMeasure;
+  /** SUM of measure for the filtered length (filterLength only). */
+  totalSql?: string;
+  totalParams?: (string | number)[];
 };
 
-function valueExpr(measure: MeasureKind): string {
+function valueExpr(measure: ChartMeasure): string {
   switch (measure) {
-    case IrMeasure.vocabulary:
-      return "1";
-    case IrMeasure.hubScore:
+    case "hub":
       return "hub_score";
-    case IrMeasure.edgeWeight:
+    case "outgoing":
       return "coalesce(e.value,0)";
-    case IrMeasure.inEdgeWeight:
+    case "incoming":
       return "coalesce(e.value,0)";
     default:
       return "token_count";
   }
 }
 
-function fromClause(measure: MeasureKind): string {
-  if (measure === IrMeasure.edgeWeight) {
+function fromClause(measure: ChartMeasure): string {
+  if (measure === "outgoing") {
     return `nodes n LEFT JOIN (SELECT from_id, sum(weight) value FROM edges GROUP BY from_id) e ON e.from_id = n.id`;
   }
-  if (measure === IrMeasure.inEdgeWeight) {
+  if (measure === "incoming") {
     return `nodes n LEFT JOIN (SELECT to_id, sum(weight) value FROM edges GROUP BY to_id) e ON e.to_id = n.id`;
   }
   return "nodes";
 }
 
-function idTokenSelect(measure: MeasureKind): string {
-  if (measure === IrMeasure.edgeWeight || measure === IrMeasure.inEdgeWeight) {
+function idTokenSelect(measure: ChartMeasure): string {
+  if (measure === "outgoing" || measure === "incoming") {
     return "n.id AS id, n.token AS token";
   }
   return "id, token";
 }
 
-function lengthExpr(measure: MeasureKind): string {
-  if (measure === IrMeasure.edgeWeight || measure === IrMeasure.inEdgeWeight) {
+function lengthExpr(measure: ChartMeasure): string {
+  if (measure === "outgoing" || measure === "incoming") {
     return `MIN(32, LENGTH(n.token) - LENGTH(REPLACE(n.token, '|', '')))`;
   }
   return LENGTH_SQL;
 }
 
-/**
- * Lower an optimized IR to a parameterized SQLite plan, or return null when
- * unsupported (caller falls back to in-memory evaluateIR).
- */
-export function lowerToSqlite(ir: ExecutionIR): SqlitePlan | null {
-  const ops = ir.ops.filter(
-    (o) => o.op !== IrOpKind.commit && o.op !== IrOpKind.facet && o.op !== IrOpKind.normalize,
-  );
-  const load = ops[0];
-  if (load?.op !== IrOpKind.load || load.measure === IrMeasure.runScalars) return null;
+/** Parse lengthKey as a non-negative integer for SQLite params. */
+export function parseLengthKey(raw: string | undefined): number {
+  if (raw == null || raw === "") throw new Error("lengthKey is required.");
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || !Number.isSafeInteger(n)) {
+    throw new Error(`lengthKey must be a non-negative integer, got: ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
 
-  const measure = load.measure;
+/** Build a parameterized SQLite plan for a chart query (non-overview). */
+export function planForQuery(query: ChartQuery): SqlitePlan {
+  const measure = query.measure;
   const value = valueExpr(measure);
   const from = fromClause(measure);
   const idTok = idTokenSelect(measure);
   const len = lengthExpr(measure);
 
-  // load only or load → topK
-  if (ops.length === 1 || (ops.length === 2 && ops[1]?.op === IrOpKind.topK)) {
-    const topK = ops[1] as Extract<IrOp, { op: typeof IrOpKind.topK }> | undefined;
-    if (topK?.by === TopKBy.order) return null;
-    const limit = topK?.limit;
-    const sql =
-      limit != null
-        ? `SELECT ${idTok}, ${value} AS value FROM ${from} ORDER BY value DESC, id ASC LIMIT ?`
-        : `SELECT ${idTok}, ${value} AS value FROM ${from}`;
+  if (query.kind === "topPatterns") {
     return {
-      sql,
-      params: limit != null ? [limit] : [],
+      sql: `SELECT ${idTok}, ${value} AS value FROM ${from} ORDER BY value DESC, id ASC LIMIT ?`,
+      params: [query.limit],
       kind: "patterns",
-      limit,
+      limit: query.limit,
       measure,
     };
   }
 
-  // load → rollupLength [→ topK]
-  if (ops[1]?.op === IrOpKind.rollupLength) {
-    const topK = ops[2];
-    if (topK && topK.op !== IrOpKind.topK) return null;
-    if (topK?.op === IrOpKind.topK && topK.by === TopKBy.order) return null;
-    const inner = `SELECT ${len} AS len_key, SUM(${value}) AS value FROM ${from} GROUP BY 1`;
-    if (topK?.op === IrOpKind.topK) {
-      return {
-        sql: `SELECT len_key AS id, CAST(len_key AS TEXT) AS token, value FROM (${inner}) ORDER BY value DESC, len_key ASC LIMIT ?`,
-        params: [topK.limit],
-        kind: "lengths",
-        limit: topK.limit,
-        measure,
-      };
-    }
-    return {
-      sql: `SELECT len_key AS id, CAST(len_key AS TEXT) AS token, value FROM (${inner}) ORDER BY len_key ASC`,
-      params: [],
-      kind: "lengths",
-      measure,
-    };
-  }
-
-  // load → reRollup (same as rollup from full population)
-  if (ops.length === 2 && ops[1]?.op === IrOpKind.reRollup) {
+  if (query.kind === "byLength") {
     const inner = `SELECT ${len} AS len_key, SUM(${value}) AS value FROM ${from} GROUP BY 1`;
     return {
       sql: `SELECT len_key AS id, CAST(len_key AS TEXT) AS token, value FROM (${inner}) ORDER BY len_key ASC`,
@@ -122,34 +91,21 @@ export function lowerToSqlite(ir: ExecutionIR): SqlitePlan | null {
     };
   }
 
-  // load → filterLength
-  if (ops.length === 2 && ops[1]?.op === IrOpKind.filterLength) {
-    const filter = ops[1];
+  if (query.kind === "lengthDrill") {
+    const lengthKey = parseLengthKey(query.lengthKey);
     return {
       sql: `SELECT ${idTok}, ${value} AS value FROM ${from} WHERE ${len} = ? ORDER BY value DESC, id ASC LIMIT ?`,
-      params: [Number(filter.lengthKey), filter.limit],
+      params: [lengthKey, query.limit],
       kind: "filterLength",
-      limit: filter.limit,
-      lengthKey: filter.lengthKey,
+      limit: query.limit,
+      lengthKey: query.lengthKey,
       measure,
+      totalSql: `SELECT COALESCE(SUM(${value}), 0) AS total FROM ${from} WHERE ${len} = ?`,
+      totalParams: [lengthKey],
     };
   }
 
-  // load → partitionByLength via window functions
-  if (ops.length === 2 && ops[1]?.op === IrOpKind.partitionByLength) {
-    const part = ops[1];
-    const base = `SELECT ${idTok}, ${value} AS value, ${len} AS len_key FROM ${from}`;
-    const ranked = `SELECT *, ROW_NUMBER() OVER (PARTITION BY len_key ORDER BY value DESC, id ASC) AS rn FROM (${base})`;
-    return {
-      sql: `SELECT id, token, value, len_key FROM (${ranked}) WHERE rn <= ? ORDER BY len_key ASC, value DESC, id ASC`,
-      params: [part.limit],
-      kind: "partition",
-      limit: part.limit,
-      measure,
-    };
-  }
-
-  return null;
+  throw new Error(`No SQL plan for chart kind: ${query.kind}`);
 }
 
 export function rowsToBins(
@@ -165,19 +121,6 @@ export function rowsToBins(
       id: Number(row.id),
       token: String(row.id),
     }));
-  }
-  if (kind === "partition") {
-    return rows.map((row) => {
-      const length = String(row.len_key ?? "");
-      const lengthTag = length === "32" ? "32+" : length;
-      return {
-        key: `${length}:${row.id}`,
-        label: `${lengthTag} · ${labeler({ id: row.id, key: String(row.id), token: row.token })}`,
-        value: row.value,
-        id: row.id,
-        token: row.token,
-      };
-    });
   }
   if (kind === "filterLength") {
     return rows.map((row) => ({
@@ -195,4 +138,20 @@ export function rowsToBins(
     id: row.id,
     token: row.token,
   }));
+}
+
+export function totalForMeasure(
+  measure: ChartMeasure,
+  run: { mass: number; edgeWeight: number; hubScore: number },
+): number {
+  if (measure === "hub") return run.hubScore;
+  if (measure === "outgoing" || measure === "incoming") return run.edgeWeight;
+  return run.mass;
+}
+
+export function unitForMeasure(measure: ChartMeasure): string {
+  if (measure === "hub") return "hub score";
+  if (measure === "outgoing") return "outgoing edge weight";
+  if (measure === "incoming") return "incoming edge weight";
+  return "stored counts";
 }
