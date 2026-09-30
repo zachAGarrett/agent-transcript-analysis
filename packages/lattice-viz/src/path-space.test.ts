@@ -437,6 +437,7 @@ describe("follow-up morphisms", () => {
     expect(enabledNames(opened.state)).toContain(Morphism.closeTimelineScrubber);
     expect(enabledNames(opened.state)).toContain(Morphism.showTimelineAccuracy);
     expect(enabledNames(opened.state)).toContain(Morphism.showTimelineLength);
+    expect(enabledNames(opened.state)).toContain(Morphism.showTimelineCompression);
     expect(enabledNames(opened.state)).not.toContain(Morphism.openTimelineScrubber);
     expect(enabledNames(opened.state)).not.toContain(Morphism.showTimelineGraph);
     expect(enabledNames(opened.state)).not.toContain(Morphism.reRollup);
@@ -449,6 +450,7 @@ describe("follow-up morphisms", () => {
     expect(accuracy.state.timelineChart).toBe("accuracy");
     expect(enabledNames(accuracy.state)).toContain(Morphism.showTimelineLength);
     expect(enabledNames(accuracy.state)).toContain(Morphism.showTimelineGraph);
+    expect(enabledNames(accuracy.state)).toContain(Morphism.showTimelineCompression);
     expect(enabledNames(accuracy.state)).not.toContain(Morphism.showTimelineAccuracy);
 
     const length = applyPath(opened.state, Morphism.showTimelineLength);
@@ -457,6 +459,15 @@ describe("follow-up morphisms", () => {
     expect(length.state.timelineChart).toBe("length");
     expect(enabledNames(length.state)).toContain(Morphism.showTimelineAccuracy);
     expect(enabledNames(length.state)).toContain(Morphism.showTimelineGraph);
+    expect(enabledNames(length.state)).toContain(Morphism.showTimelineCompression);
+
+    const compression = applyPath(opened.state, Morphism.showTimelineCompression);
+    expect(compression.ok).toBe(true);
+    if (!compression.ok) return;
+    expect(compression.state.timelineChart).toBe("compression");
+    expect(enabledNames(compression.state)).toContain(Morphism.showTimelineAccuracy);
+    expect(enabledNames(compression.state)).toContain(Morphism.showTimelineGraph);
+    expect(enabledNames(compression.state)).not.toContain(Morphism.showTimelineCompression);
 
     const back = applyPath(accuracy.state, Morphism.showTimelineGraph);
     expect(back.ok).toBe(true);

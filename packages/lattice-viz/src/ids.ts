@@ -122,6 +122,7 @@ export const Morphism = {
   showTimelineGraph: "show_timeline_graph",
   showTimelineAccuracy: "show_timeline_accuracy",
   showTimelineLength: "show_timeline_length",
+  showTimelineCompression: "show_timeline_compression",
   focusRun: "focus_run",
   drillLengthPatterns: "drill_length_patterns",
   reRollup: "re_rollup",

@@ -15,7 +15,7 @@ import {
 } from "./ids";
 import type { PathStep } from "./types";
 
-export type TimelineChartKind = "graph" | "length" | "accuracy";
+export type TimelineChartKind = "graph" | "length" | "accuracy" | "compression";
 
 export type PathState = {
   tip: TipKind;
@@ -136,7 +136,7 @@ export const pathStateSchema: Schema<PathState> = {
     selectionLengthKey: { type: "string" },
     detailRequested: { type: "boolean" },
     timelineRequested: { type: "boolean" },
-    timelineChart: { type: "string", enum: ["graph", "length", "accuracy"] },
+    timelineChart: { type: "string", enum: ["graph", "length", "accuracy", "compression"] },
     runHasEvents: { type: "boolean" },
   },
 };

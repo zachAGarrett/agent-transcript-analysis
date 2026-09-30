@@ -764,6 +764,28 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     effect: (s) => tipPatch(s, { timelineChart: "length" }),
   },
   {
+    name: Morphism.showTimelineCompression,
+    phase: Phase.session,
+    criteria: {
+      label: "Compression",
+      what: "Plot decode compression reduction (1 − steps/symbols) over the timeline",
+      not_for: "When timeline is closed or already on compression",
+      examples: ["Compression", "Compression rate", "Reduction"],
+    },
+    contract: {
+      domain: "timeline · timelineChart≠compression",
+      codomain: "timeline · timelineChart=compression",
+      source: Tip.timeline,
+      target: Tip.timeline,
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.timeline && s.timelineChart !== "compression",
+      otherwise: "Already on timeline compression chart.",
+    },
+    effect: (s) => tipPatch(s, { timelineChart: "compression" }),
+  },
+  {
     name: Morphism.focusRun,
     phase: Phase.construction,
     criteria: {

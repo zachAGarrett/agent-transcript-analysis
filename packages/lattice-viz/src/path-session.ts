@@ -24,7 +24,10 @@ export function restoreSessionTip(
   }
   if (timelineRequested || tip === Tip.timeline) {
     const chart =
-      timelineChart === "accuracy" || timelineChart === "length" || timelineChart === "graph"
+      timelineChart === "accuracy" ||
+      timelineChart === "length" ||
+      timelineChart === "graph" ||
+      timelineChart === "compression"
         ? timelineChart
         : "graph";
     next = {
