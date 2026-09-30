@@ -4,6 +4,7 @@ import type { DecodeSnapshot } from "./decoder";
 import { LiveDecoder } from "./decoder";
 import { OnlineLearner } from "./learner";
 import { orderedConcurrentMap } from "./ordered-map";
+import { type PredictionOutcome, type RankedNext, scorePrediction } from "./predictor";
 
 export type TaggedEvent = {
   kind: "tagged";
@@ -17,6 +18,11 @@ export type DecodedEvent = {
   index: number;
   symbol: string;
   snapshot: DecodeSnapshot;
+  /**
+   * Outcome of the *previous* frame's forecast against this symbol.
+   * Absent on the first decoded frame.
+   */
+  outcome?: PredictionOutcome;
 };
 
 export type SessionEndedEvent = {
@@ -47,7 +53,7 @@ type Classified = {
 };
 
 /**
- * Online session-span loop: ordered concurrent classify → learn → live decode.
+ * Online session-span loop: prequential score → learn → flush → decode → forecast.
  * One continuous LZ sequence until the message stream ends.
  */
 export class OnlineLoop<TMessage = unknown> {
@@ -74,6 +80,7 @@ export class OnlineLoop<TMessage = unknown> {
     const recompileEvery = Math.max(1, opts?.recompileEvery ?? 1);
     let symbolCount = 0;
     let sinceCompile = 0;
+    let pendingForecast: RankedNext[] | null = null;
 
     const classified = orderedConcurrentMap(
       messages,
@@ -88,7 +95,13 @@ export class OnlineLoop<TMessage = unknown> {
       if (item.encoding.atoms.every((atom) => atom === null)) continue;
 
       const symbol = this.encoder.compact(item.encoding.atoms);
+
+      // Score previous forecast against arriving symbol *before* learning it.
+      const outcome =
+        pendingForecast !== null ? scorePrediction(pendingForecast, symbol) : undefined;
+
       this.learner.pushSymbol(symbol);
+      this.learner.flush();
       symbolCount += 1;
       sinceCompile += 1;
 
@@ -105,11 +118,13 @@ export class OnlineLoop<TMessage = unknown> {
       }
 
       const snapshot = this.decoder.pushSymbol(symbol);
+      pendingForecast = snapshot.next;
       yield {
         kind: "decoded",
         index: item.index,
         symbol,
         snapshot,
+        outcome,
       };
     }
 

@@ -60,6 +60,7 @@ describe("OnlineLoop", () => {
           decodedLens.push(event.snapshot.symbols.length);
           expect(event.snapshot.result.complete).toBe(true);
           expect(event.snapshot.symbols.length).toBe(decodedLens.length);
+          expect(event.snapshot.decodedStepCount).toBe(event.snapshot.result.steps.length);
         }
         if (event.kind === "sessionEnded") endedCount = event.symbolCount;
       }
@@ -73,6 +74,47 @@ describe("OnlineLoop", () => {
       expect(vocab).toContain("b.|");
       const fromA = lattice.getNext("a.|");
       expect(fromA.some((e) => e.to === "b.|")).toBe(true);
+    } finally {
+      lattice.close();
+    }
+  });
+
+  test("prequential scoring improves on repeated structure", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-loop-learn-"));
+    dirs.push(dir);
+    const lattice = new Lattice({ filename: join(dir, "lattice.db") });
+    const loop = new OnlineLoop(fakeEncoder(), lattice, { commitBatchSize: 1 });
+
+    try {
+      const outcomes: Array<{ hitK: boolean; covered: boolean }> = [];
+      const messages = [
+        { tag: "a" },
+        { tag: "b" },
+        { tag: "a" },
+        { tag: "b" },
+        { tag: "a" },
+        { tag: "b" },
+      ];
+      for await (const event of loop.run(fromArray(messages), { concurrency: 1 })) {
+        if (event.kind === "decoded") {
+          if (!event.outcome) {
+            // First frame has no prior forecast.
+            expect(event.snapshot.symbols.length).toBe(1);
+          } else {
+            outcomes.push({ hitK: event.outcome.hitK, covered: event.outcome.covered });
+          }
+          // Forecast must not already include the next unseen target as a certainty
+          // from learning the current symbol's outgoing edge — outgoing is learned later.
+        }
+      }
+      expect(outcomes.length).toBe(5);
+      // Later a→b / b→a repetitions should become covered and often hit.
+      const early = outcomes.slice(0, 2);
+      const late = outcomes.slice(-2);
+      expect(late.every((o) => o.covered)).toBe(true);
+      expect(late.filter((o) => o.hitK).length).toBeGreaterThanOrEqual(
+        early.filter((o) => o.hitK).length,
+      );
     } finally {
       lattice.close();
     }

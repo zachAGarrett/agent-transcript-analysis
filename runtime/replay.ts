@@ -7,13 +7,58 @@ import { RUNS_DIRNAME } from "@/fixtures/prepare";
 import { serializeLoopEvent } from "./event-serialize";
 import { DEFAULT_COMMIT_BATCH_SIZE } from "./learner";
 import { OnlineLoop } from "./loop";
+import {
+  aggregateOutcomes,
+  PREDICTION_TOP_K,
+  PREDICTION_WINDOW,
+  type PredictionOutcome,
+  TRIGRAM_PRIOR,
+  UNIGRAM_POOL,
+  windowMetrics,
+} from "./predictor";
 
 export const RUNTIME_DIRNAME = "runtime";
+
+export { PREDICTION_WINDOW };
 
 function jobId(now = new Date()): string {
   const iso = now.toISOString().replace(/\.\d{3}Z$/, "Z");
   return iso.replace(/[:.]/g, "-");
 }
+
+export type PredictionSummary = {
+  methodology: "prequential-test-then-train";
+  target: "next-source-symbol";
+  topK: number;
+  window: number;
+  contextOrder: 2;
+  trigramPrior: number;
+  unigramPool: number;
+  trials: number;
+  hitAt1: number;
+  hitAtK: number;
+  mrr: number;
+  coverage: number;
+  softPrefixHitRate: number;
+  firstWindow: {
+    hitAt1: number;
+    hitAtK: number;
+    mrr: number;
+    coverage: number;
+  };
+  lastWindow: {
+    hitAt1: number;
+    hitAtK: number;
+    mrr: number;
+    coverage: number;
+  };
+  delta: {
+    hitAt1: number;
+    hitAtK: number;
+    mrr: number;
+    coverage: number;
+  };
+};
 
 export type RuntimeReplayReport = {
   version: 1;
@@ -31,6 +76,7 @@ export type RuntimeReplayReport = {
       eventsJsonl: string;
     };
   };
+  prediction?: PredictionSummary;
 };
 
 export type ReplayMessagesOptions<TMessage> = {
@@ -60,6 +106,44 @@ export type ReplayResult = {
   report: RuntimeReplayReport;
 };
 
+function summarizePredictions(outcomes: PredictionOutcome[]): PredictionSummary {
+  const overall = aggregateOutcomes(outcomes);
+  const { first, last } = windowMetrics(outcomes, PREDICTION_WINDOW);
+  return {
+    methodology: "prequential-test-then-train",
+    target: "next-source-symbol",
+    topK: PREDICTION_TOP_K,
+    window: PREDICTION_WINDOW,
+    contextOrder: 2,
+    trigramPrior: TRIGRAM_PRIOR,
+    unigramPool: UNIGRAM_POOL,
+    trials: overall.trials,
+    hitAt1: overall.hitAt1,
+    hitAtK: overall.hitAtK,
+    mrr: overall.mrr,
+    coverage: overall.coverage,
+    softPrefixHitRate: overall.softPrefixHitRate,
+    firstWindow: {
+      hitAt1: first.hitAt1,
+      hitAtK: first.hitAtK,
+      mrr: first.mrr,
+      coverage: first.coverage,
+    },
+    lastWindow: {
+      hitAt1: last.hitAt1,
+      hitAtK: last.hitAtK,
+      mrr: last.mrr,
+      coverage: last.coverage,
+    },
+    delta: {
+      hitAt1: last.hitAt1 - first.hitAt1,
+      hitAtK: last.hitAtK - first.hitAtK,
+      mrr: last.mrr - first.mrr,
+      coverage: last.coverage - first.coverage,
+    },
+  };
+}
+
 /**
  * Run OnlineLoop over an already-loaded message stream and write review artifacts.
  */
@@ -80,12 +164,14 @@ export async function replayMessages<TMessage>(
   const eventsFile = Bun.file(eventsPath);
   const writer = eventsFile.writer();
   let symbolCount = 0;
+  const outcomes: PredictionOutcome[] = [];
 
   const lattice = new Lattice({ filename: latticePath });
   try {
     const loop = new OnlineLoop(options.encoder, lattice, { commitBatchSize });
     for await (const event of loop.run(options.messages, { concurrency, recompileEvery })) {
       writer.write(`${serializeLoopEvent(event)}\n`);
+      if (event.kind === "decoded" && event.outcome) outcomes.push(event.outcome);
       if (event.kind === "sessionEnded") symbolCount = event.symbolCount;
     }
   } finally {
@@ -111,6 +197,7 @@ export async function replayMessages<TMessage>(
         eventsJsonl: options.artifactRel.eventsJsonl,
       },
     },
+    prediction: summarizePredictions(outcomes),
   };
   await writeFile(join(outDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 

@@ -75,8 +75,21 @@ describe("replayMessages", () => {
     expect(decoded.map((e) => e.symbolCount)).toEqual([1, 2, 3]);
     expect(decoded.every((e) => e.snapshot === undefined)).toBe(true);
     expect(decoded.every((e) => Array.isArray(e.steps))).toBe(true);
+    expect(decoded.every((e) => typeof e.decodedStepCount === "number")).toBe(true);
+    expect(decoded[0]?.outcome).toBeUndefined();
+    expect(decoded[1]?.outcome).toMatchObject({ actualSymbol: "b.|" });
+    expect(decoded[2]?.outcome).toMatchObject({ actualSymbol: "a.|" });
     const tagged = events.filter((e) => e.kind === "tagged");
     expect(tagged.map((e) => e.symbol)).toEqual(["a.|", "b.|", "a.|"]);
+
+    expect(result.report.prediction).toMatchObject({
+      methodology: "prequential-test-then-train",
+      target: "next-source-symbol",
+      trials: 2,
+    });
+    expect(result.report.prediction?.firstWindow).toBeDefined();
+    expect(result.report.prediction?.lastWindow).toBeDefined();
+    expect(result.report.prediction?.delta).toBeDefined();
 
     const latticePath = join(outDir, "lattice.db");
     expect(await Bun.file(latticePath).exists()).toBe(true);
@@ -88,6 +101,44 @@ describe("replayMessages", () => {
     } finally {
       lattice.close();
     }
+  });
+
+  test("prediction summary shows learning on repeated sequence", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "wt-replay-learn-"));
+    dirs.push(parent);
+    const outDir = join(parent, "job");
+    const messages = Array.from({ length: 64 }, (_, i) => ({
+      tag: i % 2 === 0 ? "a" : "b",
+    }));
+
+    const result = await replayMessages({
+      messages: fromArray(messages),
+      encoder: fakeEncoder(),
+      outDir,
+      artifactRel: {
+        latticeDb: "runtime/v1/runs/job/lattice.db",
+        eventsJsonl: "runtime/v1/runs/job/events.jsonl",
+      },
+      fixtureVersion: "v1",
+      transcriptId: "learn-transcript",
+      concurrency: 1,
+      commitBatchSize: 1,
+    });
+
+    const pred = result.report.prediction;
+    expect(pred).toBeDefined();
+    if (!pred) throw new Error("expected prediction summary");
+    expect(pred.trials).toBe(63);
+    expect(pred.coverage).toBeGreaterThan(0);
+    // Later window should not be worse on coverage than the first (learning signal).
+    expect(pred.lastWindow.coverage).toBeGreaterThanOrEqual(pred.firstWindow.coverage);
+    const eventsText = await Bun.file(join(outDir, "events.jsonl")).text();
+    const decoded = eventsText
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { kind: string; next?: unknown[] })
+      .filter((e) => e.kind === "decoded");
+    expect(decoded.some((e) => Array.isArray(e.next) && e.next.length > 0)).toBe(true);
   });
 
   test("closes events writer when the message stream fails", async () => {
