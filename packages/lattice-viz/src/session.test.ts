@@ -112,6 +112,11 @@ describe("morphism contract UI flags", () => {
     expect(isUserFollowupChip(Morphism.commit)).toBe(false);
     expect(isUserFollowupChip(Morphism.openPatternDetail)).toBe(false);
     expect(isUserFollowupChip(Morphism.closePatternDetail)).toBe(false);
+    expect(isUserFollowupChip(Morphism.openTimelineScrubber)).toBe(true);
+    expect(isUserFollowupChip(Morphism.closeTimelineScrubber)).toBe(true);
+    expect(isUserFollowupChip(Morphism.showTimelineGraph)).toBe(true);
+    expect(isUserFollowupChip(Morphism.showTimelineAccuracy)).toBe(true);
+    expect(isUserFollowupChip(Morphism.showTimelineLength)).toBe(true);
 
     for (const name of Object.keys(morphismContracts)) {
       expect(typeof morphismReloads(name)).toBe("boolean");

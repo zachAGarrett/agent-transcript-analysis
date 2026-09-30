@@ -28,6 +28,8 @@ export type Run = {
   train: number | null;
   heldOut: number | null;
   warning: string | null;
+  /** True when runtime events.jsonl exists for timeline scrubber. */
+  hasEvents?: boolean;
 };
 
 export type Facet = { run: Run; bins: Bin[]; total: number; unit: string; sql: string };

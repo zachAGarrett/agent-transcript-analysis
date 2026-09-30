@@ -15,6 +15,7 @@ function patternSource(s: PathState): boolean {
 
 /** Project PathState → region key (total on reachable tips). */
 export function pathRegionKey(state: PathState): PathRegionKey {
+  if (state.tip === Tip.timeline || state.timelineRequested) return Region.timelineScrubber;
   if (state.tip === Tip.query) return Region.query;
 
   if (state.tip === Tip.selected) {
@@ -94,6 +95,7 @@ export const pathObjects = defineObjects<PathState>()([
   region(Region.selectedDetailPattern),
   region(Region.selectedDetailLength),
   region(Region.selectedDetailPatternByLength),
+  region(Region.timelineScrubber),
 ]);
 
 export function classifyPathState(state: PathState): SemanticObjectDef<PathState> | undefined {

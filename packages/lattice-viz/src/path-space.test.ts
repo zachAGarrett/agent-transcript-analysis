@@ -393,6 +393,98 @@ describe("follow-up morphisms", () => {
     expect(closed.state.steps).toEqual(stepsBefore);
   });
 
+  test("timeline lineage opens only from query with runHasEvents", () => {
+    const { state: committed } = parsePathPlan(
+      {
+        steps: [
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.topK10 },
+          { name: Morphism.commit },
+        ],
+        runs: ["run-a"],
+      },
+      ["run-a"],
+    );
+    expect(enabledNames(committed)).not.toContain(Morphism.openTimelineScrubber);
+    expect(enabledNames({ ...committed, runHasEvents: true })).not.toContain(
+      Morphism.openTimelineScrubber,
+    );
+
+    const queryNoEvents = { ...initialPathState, runHasEvents: false };
+    expect(enabledNames(queryNoEvents)).not.toContain(Morphism.openTimelineScrubber);
+
+    const queryWithEvents = { ...initialPathState, runHasEvents: true };
+    expect(enabledNames(queryWithEvents)).toContain(Morphism.openTimelineScrubber);
+
+    const opened = applyPath(queryWithEvents, Morphism.openTimelineScrubber);
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(opened.state.tip).toBe(Tip.timeline);
+    expect(opened.state.timelineRequested).toBe(true);
+    expect(opened.state.timelineChart).toBe("graph");
+    expect(opened.state.steps).toEqual([]);
+    expect(enabledNames(opened.state)).toContain(Morphism.closeTimelineScrubber);
+    expect(enabledNames(opened.state)).toContain(Morphism.showTimelineAccuracy);
+    expect(enabledNames(opened.state)).toContain(Morphism.showTimelineLength);
+    expect(enabledNames(opened.state)).not.toContain(Morphism.openTimelineScrubber);
+    expect(enabledNames(opened.state)).not.toContain(Morphism.showTimelineGraph);
+    expect(enabledNames(opened.state)).not.toContain(Morphism.reRollup);
+    expect(enabledNames(opened.state)).not.toContain(Morphism.selectBin);
+
+    const accuracy = applyPath(opened.state, Morphism.showTimelineAccuracy);
+    expect(accuracy.ok).toBe(true);
+    if (!accuracy.ok) return;
+    expect(accuracy.state.tip).toBe(Tip.timeline);
+    expect(accuracy.state.timelineChart).toBe("accuracy");
+    expect(enabledNames(accuracy.state)).toContain(Morphism.showTimelineLength);
+    expect(enabledNames(accuracy.state)).toContain(Morphism.showTimelineGraph);
+    expect(enabledNames(accuracy.state)).not.toContain(Morphism.showTimelineAccuracy);
+
+    const length = applyPath(opened.state, Morphism.showTimelineLength);
+    expect(length.ok).toBe(true);
+    if (!length.ok) return;
+    expect(length.state.timelineChart).toBe("length");
+    expect(enabledNames(length.state)).toContain(Morphism.showTimelineAccuracy);
+    expect(enabledNames(length.state)).toContain(Morphism.showTimelineGraph);
+
+    const back = applyPath(accuracy.state, Morphism.showTimelineGraph);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.state.timelineChart).toBe("graph");
+
+    const closed = applyPath(accuracy.state, Morphism.closeTimelineScrubber);
+    expect(closed.ok).toBe(true);
+    if (!closed.ok) return;
+    expect(closed.state.tip).toBe(Tip.query);
+    expect(closed.state.timelineRequested).toBe(false);
+    expect(closed.state.timelineChart).toBe("graph");
+    expect(enabledNames({ ...closed.state, runHasEvents: true })).toContain(
+      Morphism.openTimelineScrubber,
+    );
+  });
+
+  test("committed length tip does not enable timeline or keep lattice follow-ups under timeline", () => {
+    const { state } = parsePathPlan(
+      {
+        steps: [
+          { name: Morphism.loadPatternMass },
+          { name: Morphism.rollupLength },
+          { name: Morphism.commit },
+        ],
+        runs: ["run-a"],
+      },
+      ["run-a"],
+    );
+    expect(enabledNames({ ...state, runHasEvents: true })).not.toContain(
+      Morphism.openTimelineScrubber,
+    );
+    const forced = applyPath(
+      { ...state, tip: Tip.timeline, timelineRequested: true },
+      Morphism.reRollup,
+    );
+    expect(forced.ok).toBe(false);
+  });
+
   test("re-select updates tip without growing the plan", () => {
     const { state } = parsePathPlan(
       {

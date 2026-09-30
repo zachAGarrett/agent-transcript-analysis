@@ -19,15 +19,25 @@ lowering or in-memory algebra (`merge` / `rollup` / `topWithRemainder` / `normal
 ## Tip continuum vs construction plan
 
 Constraints carve a continuum of tip states (`tip`, `grain`, `source`, selection,
-`detailRequested`, …). Effects update that tip (and sometimes the construction plan).
-Exact path history is not the identity of the **semantic region** (object).
+`detailRequested`, `timelineRequested`, …). Effects update that tip (and sometimes the
+construction plan). Exact path history is not the identity of the **semantic region**
+(object).
 
 - **Construction / display plan** (`state.steps`): loads, rollups, top-k, normalize,
   facet, commit, drill, re_rollup, focus_run — the **executable-plan subcategory** that
   interpret and `/api/view` consume.
 - **Session tip effects** (no plan lineage): `select_bin`, `clear_selection`,
   `open_pattern_detail`, `close_pattern_detail`. These update selection / detail flags
-  only; they are tip-category arrows, not data-plan interpretations.
+  only; they are tip-category arrows, not data-plan interpretations. Pattern detail
+  remains a dialog.
+- **Runtime decode timeline** (exclusive tip lineage): `open_timeline_scrubber` is legal
+  only from `tip === query` when `runHasEvents` (selected run has `events.jsonl`). It
+  sets `tip === timeline` and replaces the chart panel with the decode scrubber +
+  transition graph. Follow-ups swap that panel for accuracy-over-time or length-by-step
+  (`show_timeline_accuracy` / `show_timeline_length`); `show_timeline_graph` returns to
+  the transition view. `close_timeline_scrubber` returns to `query`. Lattice follow-ups
+  (`re_rollup`, length chips, …) stay disabled while `tip === timeline` — timeline is
+  not a follow-up on hub/length mass charts.
 - **Exploration session**: serializable `{ steps, catalogRuns, selectedRunId, display,
   selection, pathState }`. `compilePlan(session)` is the single boundary that turns
   display knobs into an executable `PathPlan`.
@@ -80,6 +90,7 @@ names, `arrowOf`).
 | Display cut | summary / faceted | displayed / faceted + `hasTopK` | `top_k_*` |
 | Reload | committed pattern top-k | committed length summary | `re_rollup` |
 | Session tip | committed/selected + context | selected / detail flags | `select_bin`, `open_pattern_detail` |
+| Runtime timeline | `query` + `runHasEvents` | `timeline` (graph / accuracy / length) | `open_timeline_scrubber`, `show_timeline_*`, `close_timeline_scrubber` |
 
 **Reload:** morphisms marked `reload` (`re_rollup`, `drill_length_patterns`,
 `partition_by_length`, `focus_run`) re-query full pattern bins and re-apply algebra. Do

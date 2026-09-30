@@ -15,6 +15,8 @@ import {
 } from "./ids";
 import type { PathStep } from "./types";
 
+export type TimelineChartKind = "graph" | "length" | "accuracy";
+
 export type PathState = {
   tip: TipKind;
   grain: GrainKind;
@@ -32,6 +34,10 @@ export type PathState = {
   selectionPatternId: number;
   selectionLengthKey: string;
   detailRequested: boolean;
+  timelineRequested: boolean;
+  timelineChart: TimelineChartKind;
+  /** Selected catalog run has runtime events.jsonl (timeline entry capability). */
+  runHasEvents: boolean;
 };
 
 export type SelectionContext = {
@@ -58,6 +64,9 @@ export const initialPathState: PathState = {
   selectionPatternId: 0,
   selectionLengthKey: "",
   detailRequested: false,
+  timelineRequested: false,
+  timelineChart: "graph",
+  runHasEvents: false,
 };
 
 export const pathStateSchema: Schema<PathState> = {
@@ -80,6 +89,9 @@ export const pathStateSchema: Schema<PathState> = {
     "selectionPatternId",
     "selectionLengthKey",
     "detailRequested",
+    "timelineRequested",
+    "timelineChart",
+    "runHasEvents",
   ],
   properties: {
     tip: {
@@ -123,5 +135,8 @@ export const pathStateSchema: Schema<PathState> = {
     selectionPatternId: { type: "number" },
     selectionLengthKey: { type: "string" },
     detailRequested: { type: "boolean" },
+    timelineRequested: { type: "boolean" },
+    timelineChart: { type: "string", enum: ["graph", "length", "accuracy"] },
+    runHasEvents: { type: "boolean" },
   },
 };

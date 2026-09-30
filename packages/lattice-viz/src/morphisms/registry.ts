@@ -53,14 +53,24 @@ export function tipPatch(state: PathState, patch: Partial<PathState>): PathState
 }
 
 export function clearSessionTip(state: PathState): PathState {
+  const tip =
+    state.tip === Tip.timeline
+      ? Tip.query
+      : state.tip === Tip.selected
+        ? state.faceted
+          ? Tip.faceted
+          : Tip.committed
+        : state.tip;
   return tipPatch(state, {
-    tip: state.tip === Tip.selected ? (state.faceted ? Tip.faceted : Tip.committed) : state.tip,
+    tip,
     hasSelection: false,
     selectionRunId: "",
     selectionBinKey: "",
     selectionPatternId: 0,
     selectionLengthKey: "",
     detailRequested: false,
+    timelineRequested: false,
+    timelineChart: "graph",
   });
 }
 
@@ -540,10 +550,11 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     },
     available: {
       when: (s) =>
-        s.tip === Tip.committed ||
-        s.tip === Tip.displayed ||
-        s.tip === Tip.faceted ||
-        s.tip === Tip.selected,
+        s.tip !== Tip.timeline &&
+        (s.tip === Tip.committed ||
+          s.tip === Tip.displayed ||
+          s.tip === Tip.faceted ||
+          s.tip === Tip.selected),
       otherwise: "Select from a rendered view.",
     },
     effect: (s, context) => {
@@ -566,7 +577,7 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
       codomain: "committed|faceted · !hasSelection",
     },
     available: {
-      when: (s) => s.hasSelection || s.tip === Tip.selected,
+      when: (s) => s.tip !== Tip.timeline && (s.hasSelection || s.tip === Tip.selected),
       otherwise: "No selection.",
     },
     effect: (s) => clearSessionTip(s),
@@ -586,7 +597,10 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
       userFollowup: false,
     },
     available: {
-      when: (s) => (s.tip === Tip.selected || s.hasSelection) && s.selectionPatternId > 0,
+      when: (s) =>
+        s.tip !== Tip.timeline &&
+        (s.tip === Tip.selected || s.hasSelection) &&
+        s.selectionPatternId > 0,
       otherwise: "Need a pattern selection.",
     },
     effect: (s) => tipPatch(s, { detailRequested: true }),
@@ -612,6 +626,116 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     effect: (s) => tipPatch(s, { detailRequested: false }),
   },
   {
+    name: Morphism.openTimelineScrubber,
+    phase: Phase.session,
+    criteria: {
+      label: "Timeline",
+      what: "Scrub live decode frames and next-pattern predictions from events.jsonl",
+      not_for: "When the selected run has no events.jsonl",
+      examples: ["Timeline", "Scrub decode", "Show timeline"],
+    },
+    contract: {
+      domain: "query · runHasEvents · !timeline",
+      codomain: "timeline · graph",
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.query && s.runHasEvents && !s.timelineRequested,
+      otherwise: "Open timeline from query when the selected run has events.jsonl.",
+    },
+    effect: (s) =>
+      tipPatch(s, {
+        tip: Tip.timeline,
+        timelineRequested: true,
+        timelineChart: "graph",
+      }),
+  },
+  {
+    name: Morphism.closeTimelineScrubber,
+    phase: Phase.session,
+    criteria: {
+      label: "Close timeline",
+      what: "Leave the runtime decode timeline and return to query",
+      not_for: "When timeline is not open",
+      examples: ["Close timeline"],
+    },
+    contract: {
+      domain: "timeline",
+      codomain: "query · !timeline",
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.timeline,
+      otherwise: "No timeline scrubber open.",
+    },
+    effect: (s) =>
+      tipPatch(s, {
+        tip: Tip.query,
+        timelineRequested: false,
+        timelineChart: "graph",
+      }),
+  },
+  {
+    name: Morphism.showTimelineGraph,
+    phase: Phase.session,
+    criteria: {
+      label: "Transitions",
+      what: "Show the next-pattern transition graph for the scrubbed frame",
+      not_for: "When already on the timeline graph view",
+      examples: ["Graph", "Transitions", "Predictions"],
+    },
+    contract: {
+      domain: "timeline · timelineChart≠graph",
+      codomain: "timeline · timelineChart=graph",
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.timeline && s.timelineChart !== "graph",
+      otherwise: "Already on timeline graph view.",
+    },
+    effect: (s) => tipPatch(s, { timelineChart: "graph" }),
+  },
+  {
+    name: Morphism.showTimelineAccuracy,
+    phase: Phase.session,
+    criteria: {
+      label: "Accuracy",
+      what: "Plot cumulative next-pattern hit rate over the decode timeline",
+      not_for: "When timeline is closed or already on accuracy",
+      examples: ["Accuracy", "Hit rate", "Predictive accuracy"],
+    },
+    contract: {
+      domain: "timeline · timelineChart≠accuracy",
+      codomain: "timeline · timelineChart=accuracy",
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.timeline && s.timelineChart !== "accuracy",
+      otherwise: "Already on timeline accuracy chart.",
+    },
+    effect: (s) => tipPatch(s, { timelineChart: "accuracy" }),
+  },
+  {
+    name: Morphism.showTimelineLength,
+    phase: Phase.session,
+    criteria: {
+      label: "Pattern length",
+      what: "Plot decoded pattern length by step over the decode timeline",
+      not_for: "When timeline is closed or already on length",
+      examples: ["Length", "Pattern length", "Span length"],
+    },
+    contract: {
+      domain: "timeline · timelineChart≠length",
+      codomain: "timeline · timelineChart=length",
+      userFollowup: true,
+    },
+    available: {
+      when: (s) => s.tip === Tip.timeline && s.timelineChart !== "length",
+      otherwise: "Already on timeline length chart.",
+    },
+    effect: (s) => tipPatch(s, { timelineChart: "length" }),
+  },
+  {
     name: Morphism.focusRun,
     phase: Phase.construction,
     criteria: {
@@ -626,7 +750,8 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
       reload: true,
     },
     available: {
-      when: (s) => s.faceted && s.hasSelection && s.selectionRunId.length > 0,
+      when: (s) =>
+        s.tip !== Tip.timeline && s.faceted && s.hasSelection && s.selectionRunId.length > 0,
       otherwise: "Focus needs faceted view + run selection.",
     },
     effect: (s) =>
@@ -656,6 +781,7 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     },
     available: {
       when: (s, context) => {
+        if (s.tip === Tip.timeline) return false;
         if (!isPatternSource(s) || s.grain !== Grain.length) return false;
         const key = lengthKeyFromContext(context, s.selectionLengthKey);
         if (!key || key === ResidualKey.other) return false;
@@ -751,6 +877,7 @@ export const morphismDefs = defineMorphisms<PathState, unknown, InterpretCtx, Pa
     },
     available: {
       when: (s) =>
+        s.tip !== Tip.timeline &&
         (s.tip === Tip.committed || s.tip === Tip.selected || s.tip === Tip.displayed) &&
         s.grain === Grain.pattern &&
         s.hasTopK &&

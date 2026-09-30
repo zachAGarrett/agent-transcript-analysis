@@ -117,7 +117,7 @@ export {
   selectionContextFromState,
   stateIsOverview,
 } from "./path-session";
-export type { PathState, SelectionContext } from "./path-state";
+export type { PathState, SelectionContext, TimelineChartKind } from "./path-state";
 export { initialPathState, pathStateSchema } from "./path-state";
 export { patternLengthKey, patternsByLength } from "./pattern-length";
 export { explorerStarterPresets, presetPaths } from "./presets";

@@ -1,4 +1,4 @@
-import { Morphism, Source } from "./ids";
+import { Morphism, Source, Tip } from "./ids";
 import { applySelectBin } from "./morphisms/registry";
 import type { PathState, SelectionContext } from "./path-state";
 
@@ -7,6 +7,10 @@ export function restoreSessionTip(
   state: PathState,
   selection?: SelectionContext | null,
   detailRequested?: boolean,
+  timelineRequested?: boolean,
+  timelineChart?: PathState["timelineChart"],
+  tip?: PathState["tip"],
+  runHasEvents?: boolean,
 ): PathState {
   let next = state;
   if (selection?.runId && selection.binKey) {
@@ -14,6 +18,28 @@ export function restoreSessionTip(
   }
   if (detailRequested && next.hasSelection && next.selectionPatternId > 0) {
     next = { ...next, detailRequested: true };
+  }
+  if (typeof runHasEvents === "boolean") {
+    next = { ...next, runHasEvents };
+  }
+  if (timelineRequested || tip === Tip.timeline) {
+    const chart =
+      timelineChart === "accuracy" || timelineChart === "length" || timelineChart === "graph"
+        ? timelineChart
+        : "graph";
+    next = {
+      ...next,
+      tip: Tip.timeline,
+      timelineRequested: true,
+      timelineChart: chart,
+    };
+  } else if (tip === Tip.query) {
+    next = {
+      ...next,
+      tip: Tip.query,
+      timelineRequested: false,
+      timelineChart: "graph",
+    };
   }
   return next;
 }

@@ -7,6 +7,7 @@ export const Tip = {
   faceted: "faceted",
   selected: "selected",
   committed: "committed",
+  timeline: "timeline",
 } as const;
 export type TipKind = (typeof Tip)[keyof typeof Tip];
 export const TipValues = Object.values(Tip) as TipKind[];
@@ -89,6 +90,7 @@ export const Region = {
   selectedDetailPattern: "selected.detail.pattern",
   selectedDetailLength: "selected.detail.length",
   selectedDetailPatternByLength: "selected.detail.pattern-by-length",
+  timelineScrubber: "timeline.scrubber",
 } as const;
 export type PathRegionKey = (typeof Region)[keyof typeof Region];
 export const RegionValues = Object.values(Region) as PathRegionKey[];
@@ -115,6 +117,11 @@ export const Morphism = {
   clearSelection: "clear_selection",
   openPatternDetail: "open_pattern_detail",
   closePatternDetail: "close_pattern_detail",
+  openTimelineScrubber: "open_timeline_scrubber",
+  closeTimelineScrubber: "close_timeline_scrubber",
+  showTimelineGraph: "show_timeline_graph",
+  showTimelineAccuracy: "show_timeline_accuracy",
+  showTimelineLength: "show_timeline_length",
   focusRun: "focus_run",
   drillLengthPatterns: "drill_length_patterns",
   reRollup: "re_rollup",

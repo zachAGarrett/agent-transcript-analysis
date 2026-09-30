@@ -23,6 +23,7 @@ export type ExplorationSession = {
   display: DisplaySpec;
   selection: SelectionContext | null;
   detailRequested: boolean;
+  timelineRequested: boolean;
   /** Tip machine snapshot (grain/source/flags/selection mirrored for enabledNames). */
   pathState: PathState;
 };
@@ -54,6 +55,7 @@ export function sessionFromPathState(
         }
       : null,
     detailRequested: state.detailRequested,
+    timelineRequested: state.timelineRequested,
     pathState: state,
   };
 }
