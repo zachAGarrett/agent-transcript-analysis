@@ -37,7 +37,39 @@ Experiments train `@khoralabs/tkn` lattices on fixture CSVs and optionally decod
 
 Native decoding maximizes the sum of token emission and adjacent transition log probabilities (add-k smoothed). Primitive and composite emissions share one count space, so longer segmentations may be favored; report both score and span/compression metrics.
 
-**Discovered LZ segments** (training) ≠ **Viterbi-decoded patterns** (evaluation) ≠ **predicted next patterns** (`getNext` after a decoded prefix).
+**Discovered LZ segments** (training) ≠ **Viterbi-decoded patterns** (evaluation) ≠
+**projected next-source-symbol targets** (prediction metrics).
+
+Online and offline prediction share [`runtime/predictor.ts`](../../runtime/predictor.ts):
+
+1. Candidate union from tip successors, atomic (latest-source) successors, decoded
+   two-tip context successors, and a unigram pool of top vocabulary patterns.
+2. Score with the compiled LM (`emissionLogProb` / `transitionLogProb`) plus add-k
+   decoded trigrams and adaptive interpolation.
+3. Rank patterns for the graph; project each pattern to its first terminal atom and
+   aggregate duplicate symbols for evaluation.
+
+### Prequential (test-then-train) order
+
+Runtime events score the prior forecast against the arriving **source symbol**, then
+learn / flush / decode / forecast:
+
+`score → learn → flush → decode → update context → forecast next`
+
+Uncovered trials count as misses; coverage is reported separately. Soft
+`pattern.startsWith(actualSymbol)` matches are diagnostic only and do not affect
+hit@k / MRR. Run reports include first-window and last-window metrics (window 32) and
+deltas — the learning signal.
+
+Frame `t` carries the outcome for the forecast made at `t−1`. The first frame has no
+outcome; the final unobserved forecast stays unscored.
+
+### Compression reduction
+
+`compressionReduction = 1 − decodedStepCount / symbolCount` (0 = atomic/no reduction).
+Supporting diagnostics: mean span (`symbolCount / decodedStepCount`), multi-symbol
+coverage, and atomic fallback rate. Full `decodedStepCount` is persisted before the
+events.jsonl steps tail is truncated.
 
 ## Pipeline
 
@@ -63,7 +95,7 @@ bun cli experiments sweep [-e <name>] [--kind decoder|lm] [--holdout] [--seed] [
 ## Sweeps and prefix prediction
 
 - [`experiments/sweeps.ts`](../../experiments/sweeps.ts) — decoder beam widths and LM (bigram/unigram + smoothing) hold-out comparisons; MDL components are reported separately (encoding cost vs vocabulary cost).
-- [`experiments/prefix.ts`](../../experiments/prefix.ts) — hit@k / MRR over `getNext(lastDecodedToken)` after decoding prefixes.
+- [`experiments/prefix.ts`](../../experiments/prefix.ts) — exact next-source-symbol hit@k / MRR after decoding held-out prefixes (shared LM predictor; soft prefix diagnostic separate).
 - [`experiments/project.ts`](../../experiments/project.ts) — axis-mask projection ablations without a new fixture version.
 
 ## agent-turn / session-span (v1)

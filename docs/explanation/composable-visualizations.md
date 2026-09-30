@@ -33,9 +33,13 @@ construction plan). Exact path history is not the identity of the **semantic reg
 - **Runtime decode timeline** (exclusive tip lineage): `open_timeline_scrubber` is legal
   only from `tip === query` when `runHasEvents` (selected run has `events.jsonl`). It
   sets `tip === timeline` and replaces the chart panel with the decode scrubber +
-  transition graph. Follow-ups swap that panel for rolling hit-rate or length-by-step
-  (`show_timeline_accuracy` / `show_timeline_length`); `show_timeline_graph` returns to
-  the transition view. `close_timeline_scrubber` returns to `query`. Lattice follow-ups
+  transition graph. Follow-ups swap that panel for rolling next-source-symbol accuracy,
+  pattern length-by-step, or compression reduction (`show_timeline_accuracy` /
+  `show_timeline_length` / `show_timeline_compression`); `show_timeline_graph` returns to
+  the transition view. Accuracy uses persisted prequential outcomes (no frame lookahead)
+  with rolling hit@1 / hit@8 / coverage and first→current learning deltas. Compression
+  plots `1 − decodedStepCount / symbolCount` with mean-span and coverage diagnostics at
+  the cursor. `close_timeline_scrubber` returns to `query`. Lattice follow-ups
   (`re_rollup`, length chips, …) stay disabled while `tip === timeline` — timeline is
   not a follow-up on hub/length mass charts.
 - **Exploration session**: serializable `{ steps, catalogRuns, selectedRunId, display,
@@ -94,7 +98,7 @@ names, `arrowOf`).
 | Display cut | summary / faceted | displayed / faceted + `hasTopK` | `top_k_*` |
 | Reload | committed pattern top-k | committed length summary | `re_rollup` |
 | Session tip | committed/selected + context | selected / detail flags | `select_bin`, `open_pattern_detail` |
-| Runtime timeline | `query` + `runHasEvents` | `timeline` (graph / accuracy / length) | `open_timeline_scrubber`, `show_timeline_*`, `close_timeline_scrubber` |
+| Runtime timeline | `query` + `runHasEvents` | `timeline` (graph / accuracy / length / compression) | `open_timeline_scrubber`, `show_timeline_*`, `close_timeline_scrubber` |
 
 **Reload:** morphisms marked `reload` (`re_rollup`, `drill_length_patterns`,
 `partition_by_length`, `focus_run`) re-query full pattern bins and re-apply algebra. Do
