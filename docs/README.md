@@ -23,7 +23,7 @@ when changing these pages.
 ## Explanation
 
 - [Encoding and experiment pipelines](explanation/encoding-and-pipelines.md)
-- [Composing run visualizations](explanation/composable-visualizations.md)
+- [Fixed category views](explanation/composable-visualizations.md)
 
 ## Architecture decisions
 

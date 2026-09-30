@@ -46,15 +46,10 @@ EXPLORER_RUNS=$PWD/runtime/v1/runs bun run visualize
 
 Open <http://127.0.0.1:8766> and refresh after new replays.
 
-When the selected run has `events.jsonl`, Ask “timeline” / “scrub” (or the **Timeline**
-followup from the query tip) opens a **runtime-decode lineage** — not a lattice-chart
-follow-up. The default view is the transition graph with a shared scrubber. Follow-ups
-**Accuracy** and **Pattern length** replace the graph with step charts (scrubber stays);
-**Transitions** returns to the graph. Breadcrumb is Timeline → Accuracy|Length; lattice
-crumbs return after **Close timeline**.
+Open the **Replay** view for a run that has `events.jsonl`. One scrubber advances
+transitions; the metrics chart switches Accuracy / Length / Compression via Measure.
 
 See [Explore experiment runs](explore-runs.md) for explorer usage (same UI; different
 `EXPLORER_RUNS` root).
 
-Runtime timeline is entered from query for runs with events, then graph/accuracy/length
-stay inside that tip — see [Composable visualizations](../explanation/composable-visualizations.md).
+Replay is a fixed category view — see [Fixed category views](../explanation/composable-visualizations.md).
