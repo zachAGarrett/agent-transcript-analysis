@@ -7,32 +7,21 @@ Reference for repository paths used by the CLI, fixtures, and experiments.
 | Path | Role |
 | --- | --- |
 | `cli/index.ts` | Repo CLI (`bun cli` / package `bin.cli`) |
-| `packages/viz-algebra/` | Pure bin algebra (`@workstream/viz-algebra`) |
-| `packages/morphism-space/` | Domain morphism registry over `@very-coffee/statespace/morphisms` |
-| `packages/lattice-viz/` | Path regions, morphisms, execution IR, interpret, charts (`@workstream/lattice-viz`) |
-| `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views (`app/views.ts`), adapters, React UI |
+| `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views (`app/views.ts`, `app/viz/`), adapters, React UI |
 | `docs/adr/` | Project-level architecture decisions (when present) |
 | `fixtures/` | Versioned tagging schemes + prepare pipeline |
 | `experiments/` | Shared experiment runtime + named experiments |
 | `runtime/` | Online session-span learn/decode loop + transcript replay jobs |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
 
-### Package dependency direction
+### Explorer data path
 
 ```text
-@very-coffee/statespace → @workstream/morphism-space → @workstream/lattice-viz → app
-                          @workstream/viz-algebra ───↗
+ChartQuery → /api/view → RunStore.query → app/adapters/sqlite-plan.ts → SQLite → View
 ```
 
-`morphism-space` owns domain metadata (phase, criteria, availability, interpret) and
-adapts definitions onto `@very-coffee/statespace/morphisms` (`instantiate` /
-`createMorphismSpace`). `lattice-viz` owns PathState region taxonomy
-(`morphisms/objects.ts`), domain morphisms, execution IR (`execution-ir.ts`,
-`compile.ts`, `evaluate-ir.ts`, `optimize.ts`), plan replay (`composeCertifiedPath`),
-and charts. The explorer UI no longer walks morphisms interactively — it loads fixed
-multi-chart views via named presets. `app/adapters/sqlite-plan.ts` lowers supported IR
-to SQLite; unsupported paths fall back to `evaluateIR`. Do not move visualization
-algebra or session compilers into `morphism-space`.
+Fixed multi-chart views are defined in `app/views.ts`. Chart models and labels live in
+`app/viz/`. There is no morphism / statespace package layer.
 
 ## Fixtures
 

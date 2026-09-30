@@ -20,7 +20,7 @@ See [docs/](docs/README.md) for how-tos, reference, and explanation.
 bun install
 ```
 
-Requires [Bun](https://bun.com). Path spaces use `@very-coffee/statespace`.
+Requires [Bun](https://bun.com).
 Cursor parent transcripts are read from `~/.cursor/projects/*/agent-transcripts/` when
 preparing fixtures.
 
