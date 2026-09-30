@@ -34,9 +34,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 
-# Tagging pipeline / experiment run outputs (datetime job folders)
+# Tagging pipeline / experiment / runtime run outputs (datetime job folders)
 fixtures/*/runs/
 experiments/*/*/runs/
+runtime/*/runs/
 
 # Legacy layout (datetime dirs directly under version)
 fixtures/*/[0-9][0-9][0-9][0-9]-*/
