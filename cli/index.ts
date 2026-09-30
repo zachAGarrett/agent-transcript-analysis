@@ -11,6 +11,7 @@ import {
   prepareFixtures,
   RUNS_DIRNAME,
 } from "@/fixtures/prepare";
+import { replayTranscript, runtimeRunsDir } from "@/runtime/replay";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -22,6 +23,8 @@ function usage(): never {
                          [--holdout <pct>] [--seed <n>] [--beam <width>] [--unigram]
   cli experiments sweep [-e <name>] [-fv <fixtureVersion>] [-fj <jobId>] [-n <count>]
                          [--holdout <pct>] [--seed <n>] [--kind decoder|lm]
+  cli runtime replay -t <transcriptId> [-v <version>] [-c <concurrency>]
+                     [--recompile-every <n>] [--commit-batch <n>]
   cli score <path-to-lattice.db>
 
 Examples:
@@ -31,6 +34,7 @@ Examples:
   bun cli experiments agent-turn -fv v1 -n 5
   bun cli experiments session-span -fv v1 -fj 2026-09-24T23-33-14Z -p 20 --holdout 20 --seed 1
   bun cli experiments agent-turn -fv v2 -fj 2026-09-25T22-55-36Z --beam 16
+  bun cli runtime replay -v v1 -t 0a146418-e845-4d84-be97-25f32ac5610c
   bun cli score experiments/agent-turn/v1/runs/<jobId>/lattice.db
 `);
   process.exit(1);
@@ -254,6 +258,51 @@ async function cmdExperimentsRun(name: string, args: string[]): Promise<void> {
   );
 }
 
+async function cmdRuntimeReplay(args: string[]): Promise<void> {
+  const versionFlag = takeFlag(args, "-v");
+  const transcriptId = takeFlag(args, "-t");
+  const concurrencyRaw = takeFlag(args, "-c");
+  const recompileRaw = takeFlag(args, "--recompile-every");
+  const commitBatchRaw = takeFlag(args, "--commit-batch");
+  if (args.length > 0 || !transcriptId) usage();
+
+  const concurrency = concurrencyRaw !== undefined ? Number(concurrencyRaw) : undefined;
+  if (
+    concurrencyRaw !== undefined &&
+    (concurrency === undefined || !Number.isInteger(concurrency) || concurrency < 1)
+  ) {
+    throw new Error("-c must be a positive integer");
+  }
+  const recompileEvery = recompileRaw !== undefined ? Number(recompileRaw) : undefined;
+  if (
+    recompileRaw !== undefined &&
+    (recompileEvery === undefined || !Number.isInteger(recompileEvery) || recompileEvery < 1)
+  ) {
+    throw new Error("--recompile-every must be a positive integer");
+  }
+  const commitBatchSize = commitBatchRaw !== undefined ? Number(commitBatchRaw) : undefined;
+  if (
+    commitBatchRaw !== undefined &&
+    (commitBatchSize === undefined || !Number.isInteger(commitBatchSize) || commitBatchSize < 1)
+  ) {
+    throw new Error("--commit-batch must be a positive integer");
+  }
+
+  const version = versionFlag ?? (await latestFixtureVersion(ROOT));
+  console.log(`Replaying transcript ${transcriptId} with fixtures/${version} encoder`);
+  const result = await replayTranscript({
+    transcriptId,
+    version,
+    root: ROOT,
+    concurrency,
+    recompileEvery,
+    commitBatchSize,
+  });
+  const runsAbs = runtimeRunsDir(ROOT, version);
+  console.log(`Done: ${result.dir} (symbols=${result.symbolCount})`);
+  console.log(`Explore: EXPLORER_RUNS=${runsAbs} bun run visualize`);
+}
+
 async function cmdExperimentsSweep(args: string[]): Promise<void> {
   const experimentName = takeFlag(args, "-e") ?? "session-span";
   const version = takeFlag(args, "-v");
@@ -331,6 +380,14 @@ async function main(): Promise<void> {
     }
     await cmdExperimentsRun(name, args);
     return;
+  }
+  if (cmd === "runtime") {
+    const sub = args.shift();
+    if (sub === "replay") {
+      await cmdRuntimeReplay(args);
+      return;
+    }
+    usage();
   }
   if (cmd === "score") {
     const path = args.shift();

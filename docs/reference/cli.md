@@ -65,6 +65,33 @@ Output: `experiments/<name>/<version>/runs/<jobId>/lattice.db`.
 
 New runs call tkn `getTopTokens` after ingest so `hub_score` is populated (DegreeScorer).
 
+## `runtime replay`
+
+Replay one Cursor parent transcript through the online session-span loop. Writes
+`lattice.db`, `events.jsonl`, and `report.json` under `runtime/<version>/runs/<jobId>/`.
+
+```text
+cli runtime replay -t <transcriptId> [-v <version>] [-c <concurrency>]
+                   [--recompile-every <n>] [--commit-batch <n>]
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `-t <transcriptId>` | Parent transcript UUID (required). |
+| `-v <version>` | Fixture scheme for encoder/load (directory under `fixtures/`). Omit → latest `v*`. |
+| `-c <concurrency>` | Max concurrent classify calls (default 8). |
+| `--recompile-every <n>` | Recompile lattice for live decode every N symbols (default 1). |
+| `--commit-batch <n>` | Flush learned segments to the lattice every N pending segments (default 10). |
+
+Does not require a prior `fixtures prepare` — reads the live transcript JSONL.
+
+Examples:
+
+```sh
+bun cli runtime replay -v v1 -t 0a146418-e845-4d84-be97-25f32ac5610c
+EXPLORER_RUNS=$PWD/runtime/v1/runs bun run visualize
+```
+
 ## `score <path-to-lattice.db>`
 
 Persist hub scores on an existing lattice via a writable tkn Lattice (`getTopTokens` → DegreeScorer). Use for runs created before scoring was wired into `runJob`.

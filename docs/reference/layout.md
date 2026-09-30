@@ -14,6 +14,7 @@ Reference for repository paths used by the CLI, fixtures, and experiments.
 | `docs/adr/` | Project-level architecture decisions (when present) |
 | `fixtures/` | Versioned tagging schemes + prepare pipeline |
 | `experiments/` | Shared experiment runtime + named experiments |
+| `runtime/` | Online session-span learn/decode loop + transcript replay jobs |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
 
 ### Package dependency direction
@@ -120,6 +121,28 @@ CLI discovery: a directory under `experiments/<name>/` is a version if it contai
 | --- | --- | --- |
 | Train loop | `run-job.ts` | — |
 | Producer | `csv-producer.ts`, `agent-turn-producer.ts` | chosen in `experiment.ts` |
+
+## Runtime
+
+```text
+runtime/
+  ordered-map.ts          # ordered concurrent map
+  learner.ts              # OnlineLearner (symbol-grain feed)
+  decoder.ts              # LiveDecoder (growing prefix)
+  loop.ts                 # OnlineLoop (classify → learn → decode)
+  replay.ts               # transcript → job artifacts
+  <version>/              # fixture scheme version used for encoding (v1, v2)
+    runs/                 # gitignored job outputs
+      <jobId>/
+        lattice.db
+        events.jsonl
+        report.json
+```
+
+- Path: `runtime/<version>/runs/<jobId>/`.
+- `jobId`: same UTC ISO timestamp style as fixture/experiment jobs.
+- Jobs under `runs/` are gitignored.
+- Explore with `EXPLORER_RUNS=<repo>/runtime/<version>/runs bun run visualize`.
 
 ## Transcript sources (fixtures prepare)
 

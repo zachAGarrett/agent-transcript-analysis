@@ -11,6 +11,7 @@ when changing these pages.
 - [Prepare fixture CSVs](how-to/prepare-fixtures.md)
 - [Run experiments](how-to/run-experiments.md)
 - [Explore experiment runs](how-to/explore-runs.md)
+- [Replay a transcript (online runtime)](how-to/replay-runtime.md)
 
 ## Reference
 
