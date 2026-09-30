@@ -1,9 +1,8 @@
 # Explore experiment runs
 
-Initialize the statespace submodule, then install and start the explorer:
+Install and start the explorer:
 
 ```sh
-bun run submodules:init
 bun install
 bun run visualize
 ```

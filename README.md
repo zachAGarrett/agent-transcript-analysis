@@ -17,11 +17,10 @@ See [docs/](docs/README.md) for how-tos, reference, and explanation.
 ## Install
 
 ```sh
-bun run submodules:init
 bun install
 ```
 
-Requires [Bun](https://bun.com). `vendor/statespace` is a git submodule (`@statespace/core`).
+Requires [Bun](https://bun.com). Path spaces use `@very-coffee/statespace`.
 Cursor parent transcripts are read from `~/.cursor/projects/*/agent-transcripts/` when
 preparing fixtures.
 

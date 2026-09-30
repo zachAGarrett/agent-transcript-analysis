@@ -9,7 +9,7 @@ declarative definition→statespace bridge and category kernel live in
 Jev path policy live in [`app/adapters`](../../app/adapters/); the React explorer holds a
 canonical [`ExplorationSession`](../../packages/lattice-viz/src/session/exploration.ts).
 
-A path space (`@statespace/core`, compiled via `@workstream/morphism-space`) exposes only
+A path space (`@very-coffee/statespace`, compiled via `@workstream/morphism-space`) exposes only
 contract-legal extensions via `enabled`; Jev (when `AI_GATEWAY_API_KEY` is set) chooses
 among those names, and the rules fallback only auto-applies when the next step is forced
 (unique legal move or `commit`). React renders the current tip; the interpretation
@@ -33,7 +33,7 @@ construction plan). Exact path history is not the identity of the **semantic reg
 - **Runtime decode timeline** (exclusive tip lineage): `open_timeline_scrubber` is legal
   only from `tip === query` when `runHasEvents` (selected run has `events.jsonl`). It
   sets `tip === timeline` and replaces the chart panel with the decode scrubber +
-  transition graph. Follow-ups swap that panel for accuracy-over-time or length-by-step
+  transition graph. Follow-ups swap that panel for rolling hit-rate or length-by-step
   (`show_timeline_accuracy` / `show_timeline_length`); `show_timeline_graph` returns to
   the transition view. `close_timeline_scrubber` returns to `query`. Lattice follow-ups
   (`re_rollup`, length chips, …) stay disabled while `tip === timeline` — timeline is
@@ -44,14 +44,18 @@ construction plan). Exact path history is not the identity of the **semantic reg
 
 ## Category model
 
-**Objects** are canonical semantic regions projected from `PathState` (source, grain,
-measure, display/session modifiers; `steps` history excluded). See
-`packages/lattice-viz/src/morphisms/objects.ts` (`pathRegionKey` / `pathObjects`).
+**Sealing objects** are tip-level partitions (`tipObjects`: query, summary, displayed,
+…). Registry morphisms declare `contract.source` / `target` (and optional `sources` /
+`targets`) against those keys and are sealed with `instantiate`.
 
-**Arrows** are registry morphisms with optional `contract.source` / `contract.target`
-object keys. Composition is certified by `composeCertifiedPath` (region hops +
-`CompositionCertificate`). Identities and flat associative composition live in
-`@workstream/morphism-space` (`identityArrow`, `composeArrows`, `checkAndApply`).
+**Fine-grained regions** (`pathRegionKey` / `pathObjects`) remain for UI and grain-level
+classification; they are not the composition endpoints.
+
+**Arrows** are the sealed registry morphisms. Construction-plan certificates come from
+`composeCertifiedPath`: replay with `enabled`/`apply`, witness the tip arrows taken, then
+`composeArrows` (tip `source` / `target` / `intermediates`; logical step names). Identities
+and flat associative composition live in `@very-coffee/statespace/morphisms`
+(`identityArrow`, `composeArrows`, `instantiate`).
 
 **Interpretation** is a functor from the executable-plan subcategory to execution IR
 (`compilePath` / `compileStep`): `F(id) = ∅`, `F(g ∘ f) = F(g) ∘ F(f)` (IR concat).
@@ -154,19 +158,20 @@ app/
 
 Dependency direction:
 
-`@statespace/core` → `@workstream/morphism-space` → `@workstream/lattice-viz` → `app`
+`@very-coffee/statespace` → `@workstream/morphism-space` → `@workstream/lattice-viz` → `app`
 
 (`viz-algebra` is a peer of `lattice-viz` for bin algebra only.)
 
 Human-readable `domain`/`codomain` strings remain for UI/docs; executable tip legality
-still uses `available.when`. Categorical membership uses `pathRegionKey` /
-`composeCertifiedPath` certificates. Load morphisms declare `source`/`target` object keys
-for closure checks when objects are supplied to `createMorphismSpace`.
+still uses `available.when`. Morphisms declare tip-level `source`/`target` (and optional
+`sources`/`targets`) for `@very-coffee/statespace/morphisms` sealing. Plan certificates
+are tip-level: `composeCertifiedPath` witnesses sealed arrows and calls `composeArrows`.
+Fine-grained `pathRegionKey` / `pathObjects` stay for UI classification only.
 
 ## Dependency
 
-`vendor/statespace` is a git submodule (`coffee-fueled-dev/statespace`). Run
-`bun run submodules:init` before `bun install` so `@statespace/core` resolves.
+Install `@very-coffee/statespace` from npm (`bun install`). Morphisms are imported from
+`@very-coffee/statespace/morphisms`.
 
 ## Limits
 
