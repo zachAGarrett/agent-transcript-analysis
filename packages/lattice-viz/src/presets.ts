@@ -1,7 +1,7 @@
 import { Morphism } from "./ids";
 import type { PathStep } from "./types";
 
-/** Named preset paths (macros for docs/rules — not a separate plan type). */
+/** Named preset paths (macros for fixed explorer charts — not interactive composition). */
 export const presetPaths: Record<string, PathStep[]> = {
   overview: [{ name: Morphism.loadRunScalars }, { name: Morphism.commit }],
   patterns: [
@@ -31,6 +31,11 @@ export const presetPaths: Record<string, PathStep[]> = {
     { name: Morphism.rollupLength },
     { name: Morphism.commit },
   ],
+  "lengths-by-in": [
+    { name: Morphism.loadInDegree },
+    { name: Morphism.rollupLength },
+    { name: Morphism.commit },
+  ],
   "lengths-by-hub": [
     { name: Morphism.loadHub },
     { name: Morphism.rollupLength },
@@ -49,7 +54,7 @@ export const presetPaths: Record<string, PathStep[]> = {
   ],
 };
 
-/** Starter chips shown in the explorer when no path is composed yet. */
+/** Legacy starter chip list — explorer uses CATEGORY_VIEWS in app/views.ts instead. */
 export const explorerStarterPresets: { id: keyof typeof presetPaths; label: string }[] = [
   { id: "patterns", label: "Mass" },
   { id: "vocabulary", label: "Vocabulary" },
