@@ -1,0 +1,16 @@
+{
+  "name": "@workstream/service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "workstream-service": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "cli": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@workstream/host": "workspace:*"
+  }
+}
