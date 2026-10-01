@@ -1,7 +1,4 @@
-/**
- * Normalized message shapes fed into the v2 tagging pipeline.
- * Extends v1 with text/tool payload fields for Jev Choice state.
- */
+/** Normalized message shapes for host-side Cursor / agent transcript tagging. */
 export type Message = UserMessage | AgentMessage | TurnEndedMessage;
 
 export type UserMessage = {

@@ -5,7 +5,7 @@ import {
   type ILattice,
   type LatticeDecodeOptions,
 } from "@khoralabs/tkn";
-import { atomicFallbackRate, multiSymbolCoverage } from "@/experiments/metrics";
+import { atomicFallbackRate, multiSymbolCoverage } from "./metrics";
 import { DecodedContext, PREDICTION_TOP_K, predictNext, type RankedNext } from "./predictor";
 
 export type NextPattern = RankedNext;

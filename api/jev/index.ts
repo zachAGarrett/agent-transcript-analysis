@@ -1,12 +1,13 @@
 import {
+  type AgentMessage,
   INTENT_CRITERIA,
   INTENT_LABELS,
   type IntentLabel,
   PURPOSE_CRITERIA,
   PURPOSE_LABELS,
   type PurposeLabel,
-} from "../../fixtures/v2/labels";
-import type { AgentMessage, UserMessage } from "../../fixtures/v2/message";
+  type UserMessage,
+} from "@workstream/host";
 
 /** Jev list price (AI Gateway); used for estimated $ even when billed as free. */
 export const JEV_INPUT_USD_PER_MILLION = 0.042;

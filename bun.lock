@@ -8,6 +8,7 @@
         "@base-ui/react": "^1.8.0",
         "@khoralabs/agent-review": "^0.2.2",
         "@khoralabs/tkn": "^0.2.1",
+        "@workstream/host": "workspace:*",
         "bun-plugin-tailwind": "^0.1.2",
         "class-variance-authority": "^0.7.1",
         "cn": "^0.4.0",
@@ -26,6 +27,26 @@
         "@types/react-dom": "^19.3.0",
         "husky": "^9.1.7",
         "typescript": "^5",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "apps/service": {
+      "name": "@workstream/service",
+      "version": "0.0.0",
+      "bin": {
+        "workstream-service": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@workstream/host": "workspace:*",
+      },
+    },
+    "packages/host": {
+      "name": "@workstream/host",
+      "version": "0.0.0",
+      "dependencies": {
+        "@khoralabs/tkn": "^0.2.1",
       },
       "peerDependencies": {
         "typescript": "^5",
@@ -268,6 +289,10 @@
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 
     "@workflow/serde": ["@workflow/serde@4.1.0", "", {}, "sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ=="],
+
+    "@workstream/host": ["@workstream/host@workspace:packages/host"],
+
+    "@workstream/service": ["@workstream/service@workspace:apps/service"],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 

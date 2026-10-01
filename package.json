@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "biome": "biome check .",
@@ -16,18 +17,17 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepare": "husky",
-    "cli": "bun cli/index.ts",
     "agent-review": "agent-review",
     "review": "agent-review run --scope staged --include-workstream",
-    "visualize": "bun app/visualize.ts"
-  },
-  "bin": {
-    "cli": "./cli/index.ts"
+    "visualize": "bun app/visualize.ts",
+    "service": "bun apps/service/src/server.ts",
+    "service:cli": "bun apps/service/src/cli.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@khoralabs/agent-review": "^0.2.2",
     "@khoralabs/tkn": "^0.2.1",
+    "@workstream/host": "workspace:*",
     "bun-plugin-tailwind": "^0.1.2",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",

@@ -1,10 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Lattice } from "@khoralabs/tkn/bun-sqlite";
-import { scoreLatticeDb } from "@/experiments/score-lattice";
-import type { Encoder } from "@/fixtures/encoders";
-import { RUNS_DIRNAME } from "@/fixtures/prepare";
+import type { PreprocessFn } from "./contracts";
 import { serializeLoopEvent } from "./event-serialize";
+import { openLattice } from "./lattice";
 import { DEFAULT_COMMIT_BATCH_SIZE } from "./learner";
 import { OnlineLoop } from "./loop";
 import {
@@ -16,8 +14,10 @@ import {
   UNIGRAM_POOL,
   windowMetrics,
 } from "./predictor";
+import { scoreLatticeDb } from "./score-lattice";
 
 export const RUNTIME_DIRNAME = "runtime";
+export const RUNS_DIRNAME = "runs";
 
 export { PREDICTION_WINDOW };
 
@@ -81,7 +81,7 @@ export type RuntimeReplayReport = {
 
 export type ReplayMessagesOptions<TMessage> = {
   messages: AsyncIterable<TMessage>;
-  encoder: Encoder<TMessage>;
+  preprocess: PreprocessFn<TMessage>;
   /** Absolute job output directory (created if missing). */
   outDir: string;
   /** Relative paths from repo root for report artifacts. */
@@ -96,7 +96,6 @@ export type ReplayMessagesOptions<TMessage> = {
   /** Segment flush threshold for OnlineLearner (default 10). */
   commitBatchSize?: number;
   createdAt?: Date;
-  root?: string;
 };
 
 export type ReplayResult = {
@@ -166,9 +165,9 @@ export async function replayMessages<TMessage>(
   let symbolCount = 0;
   const outcomes: PredictionOutcome[] = [];
 
-  const lattice = new Lattice({ filename: latticePath });
+  const ref = await openLattice({ kind: "sqlite", filename: latticePath });
   try {
-    const loop = new OnlineLoop(options.encoder, lattice, { commitBatchSize });
+    const loop = new OnlineLoop(options.preprocess, ref.lattice, { commitBatchSize });
     for await (const event of loop.run(options.messages, { concurrency, recompileEvery })) {
       writer.write(`${serializeLoopEvent(event)}\n`);
       if (event.kind === "decoded" && event.outcome) outcomes.push(event.outcome);
@@ -176,7 +175,7 @@ export async function replayMessages<TMessage>(
     }
   } finally {
     await writer.end();
-    lattice.close();
+    ref.close();
   }
 
   scoreLatticeDb(latticePath);
@@ -202,68 +201,6 @@ export async function replayMessages<TMessage>(
   await writeFile(join(outDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 
   return { dir: outDir, id, symbolCount, report };
-}
-
-type VersionModule = {
-  encoder: Encoder<unknown>;
-  listParentTranscripts: () => Array<{ id: string; path: string }>;
-  messagesFromTranscript: (path: string) => AsyncGenerator<unknown>;
-};
-
-async function loadVersion(root: string, version: string): Promise<VersionModule> {
-  const base = join(root, "fixtures", version);
-  const encoderMod = await import(`${base}/encoder.ts`);
-  const loadMod = await import(`${base}/load.ts`);
-  return {
-    encoder: encoderMod.encoder as Encoder<unknown>,
-    listParentTranscripts: loadMod.listParentTranscripts,
-    messagesFromTranscript: loadMod.messagesFromTranscript,
-  };
-}
-
-export type ReplayTranscriptOptions = {
-  transcriptId: string;
-  version: string;
-  root?: string;
-  concurrency?: number;
-  recompileEvery?: number;
-  commitBatchSize?: number;
-};
-
-/**
- * Load one parent transcript and replay it through the online session-span loop.
- */
-export async function replayTranscript(options: ReplayTranscriptOptions): Promise<ReplayResult> {
-  const root = options.root ?? join(import.meta.dir, "..");
-  const version = options.version;
-  const mod = await loadVersion(root, version);
-
-  const transcript = mod.listParentTranscripts().find((t) => t.id === options.transcriptId);
-  if (!transcript) {
-    throw new Error(`Transcript not found: ${options.transcriptId}`);
-  }
-
-  const createdAt = new Date();
-  const id = jobId(createdAt);
-  const dirRel = `${RUNTIME_DIRNAME}/${version}/${RUNS_DIRNAME}/${id}`;
-  const dirAbs = join(root, dirRel);
-
-  return replayMessages({
-    messages: mod.messagesFromTranscript(transcript.path),
-    encoder: mod.encoder,
-    outDir: dirAbs,
-    artifactRel: {
-      latticeDb: `${dirRel}/lattice.db`,
-      eventsJsonl: `${dirRel}/events.jsonl`,
-    },
-    fixtureVersion: version,
-    transcriptId: options.transcriptId,
-    concurrency: options.concurrency,
-    recompileEvery: options.recompileEvery,
-    commitBatchSize: options.commitBatchSize,
-    createdAt,
-    root,
-  });
 }
 
 /** Absolute path to runtime/<version>/runs. */

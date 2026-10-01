@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lattice } from "@khoralabs/tkn/bun-sqlite";
-import type { Atom, Encoder, Encoding } from "@/fixtures/encoders";
+import type { PreprocessFn } from "./contracts";
 import { replayMessages } from "./replay";
 
 const dirs: string[] = [];
@@ -14,34 +14,24 @@ afterEach(() => {
 
 type FakeMessage = { tag: string | null };
 
-function fakeEncoder(): Encoder<FakeMessage> {
-  return {
-    taxonomy: [{ axis: "tag", description: "t", classify: async (m) => m.tag }],
-    encodeAtom(atom: Atom) {
-      return `${atom.split(":")[1] ?? atom}.`;
-    },
-    async encode(message: FakeMessage): Promise<Encoding> {
-      return { atoms: [message.tag === null ? null : `tag:${message.tag}`] };
-    },
-    compact(atoms: ReadonlyArray<Atom | null>) {
-      return `${atoms.map((a) => (a === null ? "-." : `${a.split(":")[1]}.`)).join("")}|`;
-    },
-  };
-}
+const preprocess: PreprocessFn<FakeMessage> = async (message) => {
+  if (message.tag === null) return null;
+  return `${message.tag}.|`;
+};
 
 async function* fromArray<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item;
 }
 
 describe("replayMessages", () => {
-  test("writes lattice.db, events.jsonl, report.json; skips all-null encodings", async () => {
+  test("writes lattice.db, events.jsonl, report.json; skips null preprocess", async () => {
     const parent = mkdtempSync(join(tmpdir(), "wt-replay-"));
     dirs.push(parent);
     const outDir = join(parent, "job");
 
     const result = await replayMessages({
       messages: fromArray<FakeMessage>([{ tag: "a" }, { tag: null }, { tag: "b" }, { tag: "a" }]),
-      encoder: fakeEncoder(),
+      preprocess,
       outDir,
       artifactRel: {
         latticeDb: "runtime/v1/runs/job/lattice.db",
@@ -113,7 +103,7 @@ describe("replayMessages", () => {
 
     const result = await replayMessages({
       messages: fromArray(messages),
-      encoder: fakeEncoder(),
+      preprocess,
       outDir,
       artifactRel: {
         latticeDb: "runtime/v1/runs/job/lattice.db",
@@ -130,7 +120,6 @@ describe("replayMessages", () => {
     if (!pred) throw new Error("expected prediction summary");
     expect(pred.trials).toBe(63);
     expect(pred.coverage).toBeGreaterThan(0);
-    // Later window should not be worse on coverage than the first (learning signal).
     expect(pred.lastWindow.coverage).toBeGreaterThanOrEqual(pred.firstWindow.coverage);
     const eventsText = await Bun.file(join(outDir, "events.jsonl")).text();
     const decoded = eventsText
@@ -155,7 +144,7 @@ describe("replayMessages", () => {
     try {
       await replayMessages({
         messages: failingMessages(),
-        encoder: fakeEncoder(),
+        preprocess,
         outDir,
         artifactRel: {
           latticeDb: "runtime/v1/runs/job/lattice.db",
@@ -173,7 +162,6 @@ describe("replayMessages", () => {
 
     const eventsPath = join(outDir, "events.jsonl");
     expect(await Bun.file(eventsPath).exists()).toBe(true);
-    // Writer finalized: file is readable after the failure path.
     const text = await Bun.file(eventsPath).text();
     expect(text.length).toBeGreaterThan(0);
   });

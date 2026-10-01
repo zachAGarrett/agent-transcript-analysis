@@ -1,5 +1,5 @@
 import type { ILattice } from "@khoralabs/tkn";
-import type { Encoder, Encoding } from "@/fixtures/encoders";
+import type { PreprocessFn } from "./contracts";
 import type { DecodeSnapshot } from "./decoder";
 import { LiveDecoder } from "./decoder";
 import { OnlineLearner } from "./learner";
@@ -10,7 +10,6 @@ export type TaggedEvent = {
   kind: "tagged";
   index: number;
   symbol: string;
-  encoding: Encoding;
 };
 
 export type DecodedEvent = {
@@ -41,28 +40,27 @@ export type OnlineLoopMountOptions = {
 };
 
 export type OnlineLoopRunOptions = {
-  /** Classify concurrency (default 8). */
+  /** Preprocess concurrency (default 8). */
   concurrency?: number;
   /** Recompile lattice every N symbols (default 1). */
   recompileEvery?: number;
 };
 
-type Classified = {
-  index: number;
-  encoding: Encoding;
-};
-
 /**
- * Online session-span loop: prequential score → learn → flush → decode → forecast.
- * One continuous LZ sequence until the message stream ends.
+ * Online session-span loop over a PreprocessFn: prequential score → learn → decode → forecast.
+ * Prefer {@link createStreamRunner} when sharing a lattice across streams.
  */
 export class OnlineLoop<TMessage = unknown> {
-  readonly encoder: Encoder<TMessage>;
+  readonly preprocess: PreprocessFn<TMessage>;
   readonly learner: OnlineLearner;
   readonly decoder: LiveDecoder;
 
-  constructor(encoder: Encoder<TMessage>, lattice: ILattice, options?: OnlineLoopMountOptions) {
-    this.encoder = encoder;
+  constructor(
+    preprocess: PreprocessFn<TMessage>,
+    lattice: ILattice,
+    options?: OnlineLoopMountOptions,
+  ) {
+    this.preprocess = preprocess;
     this.learner =
       options?.learner ??
       new OnlineLearner(lattice, {
@@ -84,19 +82,17 @@ export class OnlineLoop<TMessage = unknown> {
 
     const classified = orderedConcurrentMap(
       messages,
-      async (message, index): Promise<Classified> => ({
+      async (message, index) => ({
         index,
-        encoding: await this.encoder.encode(message),
+        symbol: await this.preprocess(message, index),
       }),
       { concurrency },
     );
 
     for await (const item of classified) {
-      if (item.encoding.atoms.every((atom) => atom === null)) continue;
+      if (item.symbol === null) continue;
 
-      const symbol = this.encoder.compact(item.encoding.atoms);
-
-      // Score previous forecast against arriving symbol *before* learning it.
+      const symbol = item.symbol;
       const outcome =
         pendingForecast !== null ? scorePrediction(pendingForecast, symbol) : undefined;
 
@@ -109,7 +105,6 @@ export class OnlineLoop<TMessage = unknown> {
         kind: "tagged",
         index: item.index,
         symbol,
-        encoding: item.encoding,
       };
 
       if (sinceCompile >= recompileEvery || symbolCount === 1) {
