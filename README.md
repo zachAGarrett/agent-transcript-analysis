@@ -1,10 +1,8 @@
 # workstream-tokens
 
-Tag Cursor agent transcripts and learn lattice patterns with `@khoralabs/tkn`.
-
-Encode parent chats into versioned fixture CSVs, then run experiments (`agent-turn`,
-`session-span`) that train a SQLite lattice (`lattice.db`).
-See [docs/](docs/README.md) for how-tos, reference, and explanation.
+Learn lattice patterns over symbol streams with `@khoralabs/tkn`, packaged as
+`@workstream/host` contracts/kernels and a Bun WebSocket host in `apps/service`.
+The explorer UI reads finished `lattice.db` runs. See [docs/](docs/README.md).
 
 ## Table of Contents
 
@@ -21,33 +19,28 @@ bun install
 ```
 
 Requires [Bun](https://bun.com).
-Cursor parent transcripts are read from `~/.cursor/projects/*/agent-transcripts/` when
-preparing fixtures.
 
 ## Usage
 
 ```sh
-# Encode all parent transcripts (v1 scheme)
-bun cli fixtures prepare -v v1 -a
+# Start the WebSocket host
+bun run service
 
-# Train a lattice (sample first 50 CSVs from the latest fixture job)
-bun cli experiments agent-turn -fv v1 -n 50
-bun cli experiments session-span -fv v1 -n 50
+# Management CLI (one session; prefer `run` for multi-step)
+bun run service:cli -- list
+
+# Explorer over runtime/v1/runs (override with EXPLORER_RUNS)
+bun run visualize
 ```
-
-CLI overview: [docs/reference/cli.md](docs/reference/cli.md).
 
 ## Documentation
 
 | Kind | Pages |
 | --- | --- |
-| How-to | [Prepare fixtures](docs/how-to/prepare-fixtures.md), [Run experiments](docs/how-to/run-experiments.md) |
-| Reference | [Layout](docs/reference/layout.md), [CLI](docs/reference/cli.md), [Fixtures v1](docs/reference/fixtures.md), [Experiments](docs/reference/experiments.md) |
-| Explanation | [Encoding and pipelines](docs/explanation/encoding-and-pipelines.md) |
+| How-to | [Run service](docs/how-to/run-service.md), [Explore runs](docs/how-to/explore-runs.md) |
+| Reference | [Layout](docs/reference/layout.md), [Host](docs/reference/host.md) |
 
-Per-experiment notes: [agent-turn](experiments/agent-turn/README.md), [session-span](experiments/session-span/README.md).
-
-Agent skill for operating the CLI: [`.agents/skills/cli/SKILL.md`](.agents/skills/cli/SKILL.md).
+Agent skill for the service CLI: [`.agents/skills/cli/SKILL.md`](.agents/skills/cli/SKILL.md).
 Use [documentation](.agents/skills/agent-review/documentation/SKILL.md) when editing docs.
 
 ## Contributing

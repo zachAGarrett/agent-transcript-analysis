@@ -1,18 +1,17 @@
 # Layout and conventions
 
-Reference for repository paths used by the CLI, fixtures, and experiments.
+Reference for repository paths used by the host package, Bun service, and explorer.
 
 ## Top-level
 
 | Path | Role |
 | --- | --- |
-| `cli/index.ts` | Repo CLI (`bun cli` / package `bin.cli`) |
-| `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views (`app/views.ts`, `app/viz/`), adapters, React UI |
-| `docs/adr/` | Project-level architecture decisions (when present) |
-| `fixtures/` | Versioned tagging schemes + prepare pipeline |
-| `experiments/` | Shared experiment runtime + named experiments |
-| `runtime/` | Online session-span learn/decode loop + transcript replay jobs |
+| `packages/host` | `@workstream/host` — lattice/stream contracts + kernels |
+| `apps/service` | Bun WebSocket host + management CLI client |
+| `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views |
+| `api/` | Optional host helpers (e.g. Jev classifiers) |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
+| `runtime/<version>/runs/` | Optional on-disk replay/job outputs (gitignored) |
 
 ### Explorer data path
 
@@ -21,126 +20,36 @@ ChartQuery → /api/view → RunStore.query → app/adapters/sqlite-plan.ts → 
 ```
 
 Fixed multi-chart views are defined in `app/views.ts`. Chart models and labels live in
-`app/viz/`. There is no morphism / statespace package layer.
+`app/viz/`. Default run root: `runtime/v1/runs` (override with `EXPLORER_RUNS`).
 
-## Fixtures
-
-```text
-fixtures/
-  prepare.ts              # prepareFixtures, listJobIds, RUNS_DIRNAME
-  pipeline.ts             # Pipeline over an Encoder
-  encoders.ts             # Atom, Encoding, UNIT_DELIMITER, EMPTY_SYMBOL
-  taxonomies.ts           # TaxonomyEntry helpers
-  v1/                     # scheme version
-    message.ts
-    taxonomy.ts
-    encoder.ts
-    decoder.ts
-    load.ts               # listParentTranscripts, messagesFromTranscript
-    run.ts                # thin prepare wrapper
-    encoder.test.ts
-    runs/                 # gitignored job outputs
-      <jobId>/
-        <transcriptId>.csv
-  v2/                     # Jev intent/purpose scheme
-    …
-    runs/
-```
-
-### Version directories
-
-- Name: `v*` (example: `v1`, `v2`).
-- Latest version for CLI defaults: lexicographic last `fixtures/v*` directory.
-- A version is a self-contained scheme: taxonomy axes, codebook, message shapes, transcript loader.
-
-### Job directories
-
-- Path: `fixtures/<version>/runs/<jobId>/`.
-- `jobId`: UTC ISO timestamp with `:` / `.` replaced by `-` (example: `2026-09-25T15-27-27Z`).
-- One CSV per parent transcript: `<transcriptId>.csv`.
-- Jobs under `runs/` are gitignored.
-
-### CSV shape (v1)
-
-Header row is taxonomy axis names in order:
+## Host package
 
 ```text
-who,intent,kind,tool,sh,end
+packages/host/src/
+  contracts.ts       # LatticePersistence, LatticeRef, PreprocessFn, StreamHandle
+  lattice.ts         # openLattice + write mutex
+  stream.ts          # createStreamRunner
+  loop.ts / learner / decoder / predictor
+  schemes/           # pattern decode/label helpers for the explorer
 ```
 
-Each following row is one encoded message. Empty cells are axes that do not apply (`null` atoms). Values are axis values only (no `axis:` prefix).
+Hosts implement event schemas and `PreprocessFn` in code. Shared lattices serialize
+writes via `LatticeRef.runExclusive`.
 
-v2 header: `who,intent,purpose,kind,tool,sh,end` (see [fixtures reference](fixtures.md)).
-
-## Experiments
+## Service (WebSocket)
 
 ```text
-experiments/
-  types.ts                # ExperimentDefinition
-  run-job.ts              # shared train → lattice.db runner
-  pipeline.ts             # ExperimentPipeline over @khoralabs/tkn Lattice
-  producers.ts            # Sequence, Producer
-  csv-producer.ts         # full-session sequences from CSVs
-  agent-turn-producer.ts  # agent-turn projection
-  agent-turn/
-    README.md
-    v1/
-      experiment.ts
-      run.ts
-      runs/               # gitignored
-        <jobId>/
-          lattice.db
-  session-span/
-    README.md
-    v1/
-      …                   # same layout as agent-turn/v1
+apps/service/src/
+  server.ts          # Bun.serve + upgrade mutex + /ws
+  session.ts         # per-socket lattice/stream registry
+  cli.ts             # management CLI (WS client)
 ```
 
-### Naming
+One logical session per socket. Control/data plane is persistent WebSocket JSON
+(not REST). Start with `bun run service`; manage with `bun run service:cli`.
 
-| Segment | Meaning |
-| --- | --- |
-| `experiments/<name>/` | Experiment product (example: `agent-turn`) |
-| `experiments/<name>/<version>/` | Experiment runner version (`v1`) |
-| `…/runs/<jobId>/` | One train job; canonical artifact `lattice.db` |
-
-CLI discovery: a directory under `experiments/<name>/` is a version if it contains `experiment.ts` and is not named `runs` and does not look like a datetime job id.
-
-### Shared vs per-experiment
-
-| Module | Shared | Per experiment |
-| --- | --- | --- |
-| Train loop | `run-job.ts` | — |
-| Producer | `csv-producer.ts`, `agent-turn-producer.ts` | chosen in `experiment.ts` |
-
-## Runtime
-
-```text
-runtime/
-  ordered-map.ts          # ordered concurrent map
-  learner.ts              # OnlineLearner (symbol-grain feed)
-  decoder.ts              # LiveDecoder (growing prefix)
-  loop.ts                 # OnlineLoop (classify → learn → decode)
-  replay.ts               # transcript → job artifacts
-  <version>/              # fixture scheme version used for encoding (v1, v2)
-    runs/                 # gitignored job outputs
-      <jobId>/
-        lattice.db
-        events.jsonl
-        report.json
-```
+## Runtime job directories
 
 - Path: `runtime/<version>/runs/<jobId>/`.
-- `jobId`: same UTC ISO timestamp style as fixture/experiment jobs.
-- Jobs under `runs/` are gitignored.
+- Produced by `replayMessages` (or a host) when writing review artifacts.
 - Explore with `EXPLORER_RUNS=<repo>/runtime/<version>/runs bun run visualize`.
-
-## Transcript sources (fixtures prepare)
-
-Parent Cursor chats (not subagents):
-
-```text
-~/.cursor/projects/*/agent-transcripts/<id>/<id>.jsonl
-```
-
-Skipped: paths containing `/subagents/`, and JSONL files whose basename is not `<id>.jsonl`.

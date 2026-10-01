@@ -3,27 +3,18 @@
 Diátaxis layout for `workstream-tokens`.
 
 Agent operators: load [`.agents/skills/cli/SKILL.md`](../.agents/skills/cli/SKILL.md)
-to run the CLI; use [`.agents/skills/agent-review/documentation/SKILL.md`](../.agents/skills/agent-review/documentation/SKILL.md)
+for the WebSocket service CLI; use [`.agents/skills/agent-review/documentation/SKILL.md`](../.agents/skills/agent-review/documentation/SKILL.md)
 when changing these pages.
 
 ## How-to guides
 
-- [Prepare fixture CSVs](how-to/prepare-fixtures.md)
-- [Run experiments](how-to/run-experiments.md)
-- [Explore experiment runs](how-to/explore-runs.md)
-- [Replay a transcript (online runtime)](how-to/replay-runtime.md)
+- [Run the Bun WebSocket service](how-to/run-service.md)
+- [Explore lattice runs](how-to/explore-runs.md)
 
 ## Reference
 
 - [Layout and conventions](reference/layout.md)
-- [CLI](reference/cli.md)
-- [Fixtures (v1)](reference/fixtures.md)
-- [Experiments](reference/experiments.md)
-
-## Explanation
-
-- [Encoding and experiment pipelines](explanation/encoding-and-pipelines.md)
-- [Fixed category views](explanation/composable-visualizations.md)
+- [Host contracts and concurrency](reference/host.md)
 
 ## Architecture decisions
 
