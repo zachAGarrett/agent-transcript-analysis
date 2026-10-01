@@ -1,21 +1,7 @@
+import { schemeForWidth, splitComposite } from "@workstream/host";
 import type { PatternAtom, PatternStep } from "@/app/viz";
-import { splitComposite } from "../../fixtures/encoders";
-import { decode as decodeV1 } from "../../fixtures/v1/decoder";
-import { taxonomy as taxonomyV1 } from "../../fixtures/v1/taxonomy";
-import { decode as decodeV2 } from "../../fixtures/v2/decoder";
-import { taxonomy as taxonomyV2 } from "../../fixtures/v2/taxonomy";
 
 export type { PatternAtom, PatternStep };
-
-type Scheme = {
-  axes: readonly string[];
-  decode: (composite: string) => Array<string | null>;
-};
-
-const schemesByWidth = new Map<number, Scheme>([
-  [taxonomyV2.length, { axes: taxonomyV2.map((entry) => entry.axis), decode: decodeV2 }],
-  [taxonomyV1.length, { axes: taxonomyV1.map((entry) => entry.axis), decode: decodeV1 }],
-]);
 
 function atomValue(atom: string): string {
   const colon = atom.indexOf(":");
@@ -43,7 +29,7 @@ function decodeUnit(unit: string): PatternStep | null {
   const composite = unit.endsWith("|") ? unit : `${unit}|`;
   try {
     const width = splitComposite(composite).length;
-    const scheme = schemesByWidth.get(width);
+    const scheme = schemeForWidth(width);
     if (!scheme) return null;
     const raw = scheme.decode(composite);
     if (raw.length !== scheme.axes.length) return null;

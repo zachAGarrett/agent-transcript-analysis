@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PredictionOutcome } from "@/runtime/predictor";
+import type { PredictionOutcome } from "@workstream/host";
 import {
   accuracySeries,
   compressionSeries,

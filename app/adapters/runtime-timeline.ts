@@ -1,8 +1,8 @@
 import { createReadStream, realpathSync } from "node:fs";
 import { join, sep } from "node:path";
 import { createInterface } from "node:readline";
-import type { PredictionOutcome, RankedNext, ScorerProvenance } from "@/runtime/predictor";
-import { PREDICTION_TOP_K, PREDICTION_WINDOW } from "@/runtime/predictor";
+import type { PredictionOutcome, RankedNext, ScorerProvenance } from "@workstream/host";
+import { PREDICTION_TOP_K, PREDICTION_WINDOW } from "@workstream/host";
 
 export type TimelineStep = {
   token: string;
