@@ -9,19 +9,17 @@
     "apps/*"
   ],
   "scripts": {
-    "biome": "biome check .",
     "check": "biome check .",
-    "check:write": "biome check --write .",
     "format": "biome check --write .",
-    "format:check": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepare": "husky",
     "agent-review": "agent-review",
     "review": "agent-review run --scope staged --include-workstream",
     "visualize": "bun app/visualize.ts",
-    "service": "bun apps/service/src/server.ts",
-    "service:cli": "bun apps/service/src/cli.ts"
+    "service": "bun run --filter @workstream/service start",
+    "service:cli": "bun run --filter @workstream/service cli",
+    "service:emit": "bun run --filter @workstream/service emit"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
