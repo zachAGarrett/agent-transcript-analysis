@@ -1,13 +1,15 @@
 #!/usr/bin/env bun
 /**
- * Management CLI — WebSocket client for apps/service (one session per process).
+ * Management CLI — signed WebSocket client (Emitter) for apps/service.
  *
  * Usage:
  *   bun apps/service/src/cli.ts [--url ws://127.0.0.1:8787/ws] <op> [json-args]
  *   bun apps/service/src/cli.ts [--url …] run '<json-array-of-ops>'
- *
- * Single ops share one connection only within `run`. Prefer `run` for multi-step flows.
  */
+
+import { loadOrCreateMeshKeypair } from "@workstream/service-auth";
+import { Emitter } from "./emitter";
+import { defaultDataDir, emitterKeyPath } from "./server";
 
 function usage(): never {
   console.error(`Usage:
@@ -68,73 +70,6 @@ export function parseArgs(argv: string[]): {
   return { url, mode: "one", op: head, payload };
 }
 
-async function withSession(
-  url: string,
-  ops: Array<Record<string, unknown>>,
-): Promise<{ ok: boolean; messages: unknown[] }> {
-  const ws = new WebSocket(url);
-  await new Promise<void>((resolve, reject) => {
-    const onOpen = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = (ev: Event) => {
-      cleanup();
-      reject(ev);
-    };
-    const onClose = () => {
-      cleanup();
-      reject(new Error("WebSocket closed before open"));
-    };
-    const cleanup = () => {
-      ws.removeEventListener("open", onOpen);
-      ws.removeEventListener("error", onError);
-      ws.removeEventListener("close", onClose);
-    };
-    ws.addEventListener("open", onOpen);
-    ws.addEventListener("error", onError);
-    ws.addEventListener("close", onClose);
-  });
-
-  const messages: unknown[] = [];
-  let failed = false;
-
-  for (const op of ops) {
-    const id = crypto.randomUUID();
-    await new Promise<void>((resolve, reject) => {
-      const settle = (fn: () => void) => {
-        ws.removeEventListener("message", onMessage);
-        ws.removeEventListener("error", onError);
-        ws.removeEventListener("close", onClose);
-        fn();
-      };
-      const onMessage = (ev: MessageEvent) => {
-        try {
-          const msg = JSON.parse(String(ev.data)) as { id?: string; ok?: boolean; type?: string };
-          messages.push(msg);
-          console.log(JSON.stringify(msg));
-          if (msg.id === id) {
-            if (msg.ok === false) failed = true;
-            settle(() => resolve());
-          }
-        } catch (error) {
-          settle(() => reject(error));
-        }
-      };
-      const onError = (ev: Event) => settle(() => reject(ev));
-      const onClose = () => settle(() => reject(new Error("WebSocket closed before reply")));
-      ws.addEventListener("message", onMessage);
-      ws.addEventListener("error", onError);
-      ws.addEventListener("close", onClose);
-      ws.send(JSON.stringify({ id, ...op }));
-    });
-    if (failed) break;
-  }
-
-  ws.close();
-  return { ok: !failed, messages };
-}
-
 async function main() {
   const parsed = parseArgs(Bun.argv.slice(2));
   if (parsed.mode === "help") usage();
@@ -146,8 +81,23 @@ async function main() {
     console.error("run expects a non-empty JSON array");
     process.exit(1);
   }
-  const { ok } = await withSession(parsed.url, ops);
-  if (!ok) process.exit(1);
+
+  const keypair = loadOrCreateMeshKeypair(emitterKeyPath(defaultDataDir()), "workstream-emitter");
+  const emitter = await Emitter.connect({
+    url: parsed.url,
+    keypair,
+    onEvent: (event) => console.log(JSON.stringify(event)),
+  });
+
+  try {
+    for (const op of ops) {
+      const reply = await emitter.request(op as Parameters<Emitter["request"]>[0]);
+      console.log(JSON.stringify(reply));
+      if (!reply.ok) process.exit(1);
+    }
+  } finally {
+    emitter.close();
+  }
 }
 
 if (import.meta.main) {

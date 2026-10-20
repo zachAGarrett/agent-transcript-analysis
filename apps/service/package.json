@@ -7,10 +7,12 @@
     "workstream-service": "./src/cli.ts"
   },
   "scripts": {
-    "start": "bun run src/server.ts",
-    "cli": "bun run src/cli.ts"
+    "start": "bun src/server.ts",
+    "cli": "bun src/cli.ts",
+    "emit": "bun src/emit-example.ts"
   },
   "dependencies": {
-    "@workstream/host": "workspace:*"
+    "@workstream/host": "workspace:*",
+    "@workstream/service-auth": "workspace:*"
   }
 }

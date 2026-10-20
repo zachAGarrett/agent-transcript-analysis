@@ -40,6 +40,7 @@
       },
       "dependencies": {
         "@workstream/host": "workspace:*",
+        "@workstream/service-auth": "workspace:*",
       },
     },
     "packages/host": {
@@ -51,6 +52,10 @@
       "peerDependencies": {
         "typescript": "^5",
       },
+    },
+    "packages/service-auth": {
+      "name": "@workstream/service-auth",
+      "version": "0.0.0",
     },
   },
   "packages": {
@@ -293,6 +298,8 @@
     "@workstream/host": ["@workstream/host@workspace:packages/host"],
 
     "@workstream/service": ["@workstream/service@workspace:apps/service"],
+
+    "@workstream/service-auth": ["@workstream/service-auth@workspace:packages/service-auth"],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 

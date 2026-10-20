@@ -1,3 +1,13 @@
+import { join } from "node:path";
+import {
+  loadOrCreateMeshKeypair,
+  loadTrustFromEnv,
+  lookupTrustedPublicKey,
+  resetTrustStore,
+  setTrustedPublicKeys,
+  verifyJwsCompact,
+  verifyRequest,
+} from "@workstream/service-auth";
 import {
   type ClientRequest,
   closeSession,
@@ -17,9 +27,73 @@ const DEFAULT_HOST = process.env.WORKSTREAM_SERVICE_HOST ?? "127.0.0.1";
 /** Serialize HTTP→WS upgrades and connection registry churn. */
 const upgradeMutex = createMutex();
 
-export function startService(options?: { port?: number; hostname?: string }) {
+export type StartServiceOptions = {
+  port?: number;
+  hostname?: string;
+  /** Key material directory (default `.data/workstream`). */
+  dataDir?: string;
+  /**
+   * When set, reset trust and use only these keys (tests).
+   * Keys are kid → multibase public key.
+   */
+  trustedKeys?: Record<string, string>;
+};
+
+export function defaultDataDir(): string {
+  const fromEnv = process.env.WORKSTREAM_DATA_DIR?.trim();
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return join(process.cwd(), ".data", "workstream");
+}
+
+export function emitterKeyPath(dataDir = defaultDataDir()): string {
+  return join(dataDir, "emitter-ed25519.json");
+}
+
+export function serviceKeyPath(dataDir = defaultDataDir()): string {
+  return join(dataDir, "service-ed25519.json");
+}
+
+/** Boot mesh identity + trust store for emitters. */
+export function bootAuth(options?: {
+  dataDir?: string;
+  trustedKeys?: Record<string, string>;
+}): void {
+  const dataDir = options?.dataDir ?? defaultDataDir();
+  loadOrCreateMeshKeypair(serviceKeyPath(dataDir), "workstream-service");
+
+  if (options?.trustedKeys) {
+    resetTrustStore();
+    setTrustedPublicKeys(options.trustedKeys);
+    return;
+  }
+
+  resetTrustStore();
+  loadTrustFromEnv();
+  if (!lookupTrustedPublicKey("workstream-emitter")) {
+    const emitter = loadOrCreateMeshKeypair(emitterKeyPath(dataDir), "workstream-emitter");
+    setTrustedPublicKeys({ "workstream-emitter": emitter.publicKey });
+  }
+}
+
+function extractJws(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const obj = JSON.parse(trimmed) as { jws?: unknown };
+      return typeof obj.jws === "string" ? obj.jws : null;
+    } catch {
+      return null;
+    }
+  }
+  // Compact JWS has exactly two dots
+  if (trimmed.split(".").length === 3) return trimmed;
+  return null;
+}
+
+export function startService(options?: StartServiceOptions) {
   const port = options?.port ?? DEFAULT_PORT;
   const hostname = options?.hostname ?? DEFAULT_HOST;
+  bootAuth({ dataDir: options?.dataDir, trustedKeys: options?.trustedKeys });
 
   const server = Bun.serve<SocketData>({
     port,
@@ -31,6 +105,14 @@ export function startService(options?: { port?: number; hostname?: string }) {
       }
       if (url.pathname !== "/ws") {
         return new Response("Not found", { status: 404 });
+      }
+
+      const verified = await verifyRequest(req, lookupTrustedPublicKey);
+      if (!verified.ok) {
+        return new Response(JSON.stringify({ error: verified.error }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        });
       }
 
       return upgradeMutex(async () => {
@@ -47,10 +129,22 @@ export function startService(options?: { port?: number; hostname?: string }) {
         /* session created at upgrade */
       },
       async message(ws, raw) {
+        const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
+        const jws = extractJws(text);
+        if (jws === null) {
+          ws.send(JSON.stringify({ id: "?", ok: false, error: "expected compact JWS frame" }));
+          return;
+        }
+
+        const verified = verifyJwsCompact(jws, lookupTrustedPublicKey);
+        if (!verified.ok) {
+          ws.send(JSON.stringify({ id: "?", ok: false, error: verified.error }));
+          return;
+        }
+
         let req: ClientRequest;
         try {
-          const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-          const parsed: unknown = JSON.parse(text);
+          const parsed: unknown = JSON.parse(new TextDecoder().decode(verified.payload));
           const requestId =
             parsed &&
             typeof parsed === "object" &&
@@ -68,7 +162,7 @@ export function startService(options?: { port?: number; hostname?: string }) {
             return;
           }
         } catch {
-          ws.send(JSON.stringify({ id: "?", ok: false, error: "invalid JSON" }));
+          ws.send(JSON.stringify({ id: "?", ok: false, error: "invalid JWS payload JSON" }));
           return;
         }
 
