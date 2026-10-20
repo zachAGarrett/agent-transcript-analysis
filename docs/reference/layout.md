@@ -7,7 +7,8 @@ Reference for repository paths used by the host package, Bun service, and explor
 | Path | Role |
 | --- | --- |
 | `packages/host` | `@workstream/host` — lattice/stream contracts + kernels |
-| `apps/service` | Bun WebSocket host + management CLI client |
+| `packages/service-auth` | `@workstream/service-auth` — Ed25519 JWS + RFC 9421 mesh crypto |
+| `apps/service` | Bun WebSocket host + Emitter / management CLI |
 | `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views |
 | `api/` | Optional host helpers (e.g. Jev classifiers) |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
