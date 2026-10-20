@@ -1,6 +1,6 @@
 # Explore lattice runs
 
-Install and start the explorer:
+Install and start the explorer (`@workstream/explorer` in `apps/explorer`):
 
 ```sh
 bun install

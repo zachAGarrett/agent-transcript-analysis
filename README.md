@@ -1,8 +1,8 @@
 # workstream-tokens
 
 Learn lattice patterns over symbol streams with `@khoralabs/tkn`, packaged as
-`@workstream/host` contracts/kernels and a Bun WebSocket host in `apps/service`.
-The explorer UI reads finished `lattice.db` runs. See [docs/](docs/README.md).
+`@workstream/host` contracts/kernels, a Bun WebSocket host in `apps/service`, and
+the lattice explorer in `apps/explorer`. See [docs/](docs/README.md).
 
 ## Table of Contents
 

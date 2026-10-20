@@ -9,7 +9,7 @@ Reference for repository paths used by the host package, Bun service, and explor
 | `packages/host` | `@workstream/host` — lattice/stream contracts + kernels |
 | `packages/service-auth` | `@workstream/service-auth` — Ed25519 JWS + RFC 9421 mesh crypto |
 | `apps/service` | Bun WebSocket host + Emitter / management CLI |
-| `app/` | Lattice explorer: fixed Lattice / Connectivity / Replay views |
+| `apps/explorer` | `@workstream/explorer` — Lattice / Connectivity / Replay UI |
 | `api/` | Optional host helpers (e.g. Jev classifiers) |
 | `docs/` | Diátaxis docs (how-to, reference, explanation) |
 | `runtime/<version>/runs/` | Optional on-disk replay/job outputs (gitignored) |
@@ -17,11 +17,11 @@ Reference for repository paths used by the host package, Bun service, and explor
 ### Explorer data path
 
 ```text
-ChartQuery → /api/view → RunStore.query → app/adapters/sqlite-plan.ts → SQLite → View
+ChartQuery → /api/view → RunStore.query → apps/explorer/adapters/sqlite-plan.ts → SQLite → View
 ```
 
-Fixed multi-chart views are defined in `app/views.ts`. Chart models and labels live in
-`app/viz/`. Default run root: `runtime/v1/runs` (override with `EXPLORER_RUNS`).
+Fixed multi-chart views are defined in `apps/explorer/views.ts`. Chart models and labels live in
+`apps/explorer/viz/`. Default run root: `runtime/v1/runs` (override with `EXPLORER_RUNS`).
 
 ## Host package
 
