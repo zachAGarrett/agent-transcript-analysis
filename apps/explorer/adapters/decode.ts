@@ -1,4 +1,5 @@
-import { schemeForWidth, splitComposite } from "@workstream/host";
+import { schemeForWidth } from "@workstream/host/schemes";
+import { splitComposite } from "@workstream/host/symbols";
 import type { PatternAtom, PatternStep } from "@/app/viz";
 
 export type { PatternAtom, PatternStep };

@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PredictionOutcome } from "@workstream/host";
+import { readRuntimeTimeline } from "./runtime-timeline";
 import {
   accuracySeries,
   compressionSeries,
-  readRuntimeTimeline,
   type TimelineFrame,
-} from "./runtime-timeline";
+  type TimelineOutcome,
+} from "./runtime-timeline-model";
 
 const dirs: string[] = [];
 
@@ -16,9 +16,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function outcome(
-  partial: Partial<PredictionOutcome> & { actualSymbol: string },
-): PredictionOutcome {
+function outcome(partial: Partial<TimelineOutcome> & { actualSymbol: string }): TimelineOutcome {
   return {
     covered: true,
     rank: 1,

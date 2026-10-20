@@ -13,7 +13,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./*"],
-      "@/components/*": ["./app/components/*"]
+      "@/app/*": ["./apps/explorer/*"],
+      "@/components/*": ["./apps/explorer/components/*"]
     },
     "strict": true,
     "skipLibCheck": true,

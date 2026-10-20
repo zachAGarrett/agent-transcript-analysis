@@ -1,116 +1,32 @@
+/**
+ * Server-only: reads events.jsonl. Browser code must import from
+ * `./runtime-timeline-model` (or the re-exports below stay unused in HTML entry).
+ */
 import { createReadStream, realpathSync } from "node:fs";
 import { join, sep } from "node:path";
 import { createInterface } from "node:readline";
-import type { PredictionOutcome, RankedNext, ScorerProvenance } from "@workstream/host";
-import { PREDICTION_TOP_K, PREDICTION_WINDOW } from "@workstream/host";
+import type {
+  TimelineFrame,
+  TimelineNext,
+  TimelineOutcome,
+  TimelineStep,
+} from "./runtime-timeline-model";
 
-export type TimelineStep = {
-  token: string;
-  start: number;
-  end: number;
-  emissionScore: number;
-  transitionScore: number;
-};
-
-export type TimelineNext = {
-  pattern: string;
-  symbol?: string;
-  weight: number;
-  prob: number;
-  source?: ScorerProvenance;
-};
-
-export type TimelineFrame = {
-  index: number;
-  symbol: string;
-  symbolCount: number;
-  multiSymbolCoverage: number;
-  atomicFallbackRate: number;
-  /** Full decoded step count; may equal steps.length for legacy rows. */
-  decodedStepCount: number;
-  /** True when decodedStepCount was inferred from the truncated steps tail. */
-  decodedStepCountApproximate: boolean;
-  score: number;
-  complete: boolean;
-  steps: TimelineStep[];
-  next: TimelineNext[];
-  /** Outcome of the previous forecast vs this frame's source symbol. */
-  outcome?: PredictionOutcome;
-};
-
-/** Top-k for timeline predictive accuracy (matches transition-graph next slots). */
-export const TIMELINE_HIT_K = PREDICTION_TOP_K;
-
-/** Rolling window (prediction steps) for timeline hit-rate series. */
-export const TIMELINE_ACCURACY_WINDOW = PREDICTION_WINDOW;
-
-export type TimelineAccuracyPoint = {
-  i: number;
-  index: number;
-  hit1: number;
-  hitK: number;
-  mrr: number;
-  coverage: number;
-  window: number;
-};
-
-/**
- * Rolling hit@1 / hit@k / MRR / coverage from persisted prequential outcomes.
- * No frame lookahead — outcomes already score the prior forecast against this symbol.
- */
-export function accuracySeries(
-  frames: TimelineFrame[],
-  windowSize = TIMELINE_ACCURACY_WINDOW,
-): TimelineAccuracyPoint[] {
-  const window = Math.max(1, windowSize);
-  const outcomes: PredictionOutcome[] = [];
-  const out: TimelineAccuracyPoint[] = [];
-  for (let i = 0; i < frames.length; i++) {
-    const frame = frames[i];
-    if (frame?.outcome) outcomes.push(frame.outcome);
-    const slice = outcomes.slice(-window);
-    const n = slice.length;
-    out.push({
-      i,
-      index: frame?.index ?? i,
-      hit1: n > 0 ? slice.filter((o) => o.hit1).length / n : 0,
-      hitK: n > 0 ? slice.filter((o) => o.hitK).length / n : 0,
-      mrr: n > 0 ? slice.reduce((s, o) => s + o.reciprocalRank, 0) / n : 0,
-      coverage: n > 0 ? slice.filter((o) => o.covered).length / n : 0,
-      window: n,
-    });
-  }
-  return out;
-}
-
-export type TimelineCompressionPoint = {
-  i: number;
-  index: number;
-  /** 1 − decodedStepCount / symbolCount */
-  reduction: number;
-  meanSpan: number;
-  multiSymbolCoverage: number;
-  atomicFallbackRate: number;
-  approximate: boolean;
-};
-
-/** Compression reduction over timeline position. */
-export function compressionSeries(frames: TimelineFrame[]): TimelineCompressionPoint[] {
-  return frames.map((f, i) => {
-    const symbolCount = Math.max(0, f.symbolCount);
-    const steps = Math.max(0, f.decodedStepCount);
-    const reduction = symbolCount === 0 ? 0 : 1 - steps / symbolCount;
-    return {
-      i,
-      index: f.index,
-      reduction: Math.max(0, Math.min(1, reduction)),
-      meanSpan: steps === 0 ? 0 : symbolCount / steps,
-      multiSymbolCoverage: f.multiSymbolCoverage,
-      atomicFallbackRate: f.atomicFallbackRate,
-      approximate: f.decodedStepCountApproximate,
-    };
-  });
-}
+export type {
+  ScorerProvenance,
+  TimelineAccuracyPoint,
+  TimelineCompressionPoint,
+  TimelineFrame,
+  TimelineNext,
+  TimelineOutcome,
+  TimelineStep,
+} from "./runtime-timeline-model";
+export {
+  accuracySeries,
+  compressionSeries,
+  TIMELINE_ACCURACY_WINDOW,
+  TIMELINE_HIT_K,
+} from "./runtime-timeline-model";
 
 const MAX_FRAMES = 20_000;
 /** Cap steps kept per frame from fat legacy events.jsonl rows. */
@@ -164,7 +80,7 @@ function tailSteps(
 function mapNext(raw: unknown): TimelineNext[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((e) => {
-    const row = e as RankedNext & { pattern: string; weight: number; prob: number };
+    const row = e as TimelineNext & { pattern: string; weight: number; prob: number };
     return {
       pattern: String(row.pattern ?? ""),
       symbol: row.symbol !== undefined ? String(row.symbol) : undefined,
@@ -175,7 +91,7 @@ function mapNext(raw: unknown): TimelineNext[] {
   });
 }
 
-function mapOutcome(raw: unknown): PredictionOutcome | undefined {
+function mapOutcome(raw: unknown): TimelineOutcome | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const o = raw as Record<string, unknown>;
   if (typeof o.actualSymbol !== "string") return undefined;

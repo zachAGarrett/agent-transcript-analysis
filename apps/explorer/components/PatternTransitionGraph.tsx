@@ -1,6 +1,6 @@
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { formatPatternBriefChain, patternDisplayLabel } from "@/app/adapters/decode";
-import type { TimelineNext } from "@/app/adapters/runtime-timeline";
+import type { TimelineNext } from "@/app/adapters/runtime-timeline-model";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";

@@ -282,4 +282,5 @@ export class RunStore {
   }
 }
 
-export const defaultRoot = resolve(import.meta.dir, "../../runtime/v1/runs");
+/** Repo-root `runtime/v1/runs` (adapters/ → explorer/ → apps/ → root). */
+export const defaultRoot = resolve(import.meta.dir, "../../../runtime/v1/runs");

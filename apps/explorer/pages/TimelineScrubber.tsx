@@ -7,7 +7,7 @@ import {
   TIMELINE_ACCURACY_WINDOW,
   TIMELINE_HIT_K,
   type TimelineFrame,
-} from "@/app/adapters/runtime-timeline";
+} from "@/app/adapters/runtime-timeline-model";
 import { PatternTransitionGraph } from "@/app/components/PatternTransitionGraph";
 import { VisualizationCard } from "@/app/components/VisualizationCard";
 import { Badge } from "@/components/ui/badge";

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./schemes": "./src/schemes/index.ts",
+    "./symbols": "./src/symbols.ts"
   },
   "dependencies": {
     "@khoralabs/tkn": "^0.2.1"
