@@ -2,9 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  buildGrantRequestBody,
+  issueOpenGrant,
+  parseGnapAuthorization,
+  verifyGrantRequest,
+} from "./gnap";
 import { MESH_SIGNATURE_SKEW_SEC, signHttpMessage, verifyHttpMessage } from "./http-signature";
+import { multibaseFromPublicJwk, publicJwkFromMeshKeypair } from "./jwk";
 import { signJws, verifyJws, verifyJwsCompact } from "./jws";
 import { generateMeshKeypair, loadOrCreateMeshKeypair, parseMeshKeyJson } from "./keys";
+import { TokenStore } from "./token";
 import { lookupTrustedPublicKey, resetTrustStore, setTrustedPublicKey } from "./trust";
 
 const tempDirs: string[] = [];
@@ -223,5 +231,111 @@ describe("trust", () => {
     expect(lookupTrustedPublicKey("a")).toBe("uTEST");
     resetTrustStore();
     expect(lookupTrustedPublicKey("a")).toBeUndefined();
+  });
+});
+
+describe("jwk", () => {
+  test("round-trip mesh keypair to public JWK", () => {
+    const kp = generateMeshKeypair("emitter");
+    const jwk = publicJwkFromMeshKeypair(kp);
+    expect(jwk.kty).toBe("OKP");
+    expect(jwk.crv).toBe("Ed25519");
+    expect(jwk.kid).toBe("emitter");
+    expect(multibaseFromPublicJwk(jwk)).toBe(kp.publicKey);
+  });
+});
+
+describe("gnap", () => {
+  test("parseGnapAuthorization", () => {
+    expect(parseGnapAuthorization("GNAP abc.def")).toBe("abc.def");
+    expect(parseGnapAuthorization("gnap tok")).toBe("tok");
+    expect(parseGnapAuthorization("Bearer x")).toBeNull();
+    expect(parseGnapAuthorization(null)).toBeNull();
+  });
+
+  test("verifyGrantRequest accepts httpsig over embedded key", () => {
+    const kp = generateMeshKeypair("emitter");
+    const url = "http://127.0.0.1:8787/gnap";
+    const bodyObj = buildGrantRequestBody(kp);
+    const body = new TextEncoder().encode(JSON.stringify(bodyObj));
+    const { headers } = signHttpMessage({
+      method: "POST",
+      url,
+      body,
+      keypair: kp,
+      headers: new Headers({ "content-type": "application/json" }),
+    });
+    const result = verifyGrantRequest({ method: "POST", url, headers, body });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.keyid).toBe("emitter");
+      expect(result.publicKey).toBe(kp.publicKey);
+    }
+  });
+
+  test("verifyGrantRequest rejects mismatched signing key", () => {
+    const presented = generateMeshKeypair("presented");
+    const signer = generateMeshKeypair("signer");
+    const url = "http://127.0.0.1:8787/gnap";
+    const bodyObj = buildGrantRequestBody(presented);
+    const body = new TextEncoder().encode(JSON.stringify(bodyObj));
+    const { headers } = signHttpMessage({
+      method: "POST",
+      url,
+      body,
+      keypair: signer,
+      headers: new Headers({ "content-type": "application/json" }),
+    });
+    const result = verifyGrantRequest({ method: "POST", url, headers, body });
+    expect(result.ok).toBe(false);
+  });
+
+  test("TokenStore issues and expires tokens", () => {
+    const store = new TokenStore();
+    const kp = generateMeshKeypair("emitter");
+    const issued = store.issue({
+      publicKey: kp.publicKey,
+      keyid: kp.keyid,
+      access: [{ type: "workstream", actions: ["session"] }],
+      expiresInSec: 10,
+      nowSec: 1_000,
+    });
+    expect(store.lookup(issued.value, 1_005)?.keyid).toBe("emitter");
+    expect(store.lookup(issued.value, 1_011)).toBeUndefined();
+  });
+
+  test("issueOpenGrant returns key-bound token", () => {
+    const store = new TokenStore();
+    const kp = generateMeshKeypair("emitter");
+    const grant = issueOpenGrant(
+      {
+        ok: true,
+        keyid: kp.keyid,
+        publicKey: kp.publicKey,
+        access: [{ type: "workstream", actions: ["session"] }],
+      },
+      store,
+    );
+    expect(grant.access_token.key).toBe(true);
+    expect(store.lookup(grant.access_token.value)?.publicKey).toBe(kp.publicKey);
+  });
+
+  test("signHttpMessage covers authorization when present", () => {
+    const kp = generateMeshKeypair("emitter");
+    const url = "http://127.0.0.1:8787/ws";
+    const { headers } = signHttpMessage({
+      method: "GET",
+      url,
+      keypair: kp,
+      headers: new Headers({ authorization: "GNAP tok" }),
+    });
+    expect(headers.get("signature-input")).toContain('"authorization"');
+    const result = verifyHttpMessage({
+      method: "GET",
+      url,
+      headers,
+      lookupPublicKey: (id) => (id === kp.keyid ? kp.publicKey : undefined),
+    });
+    expect(result).toEqual({ ok: true, keyid: "emitter" });
   });
 });

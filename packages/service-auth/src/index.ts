@@ -1,4 +1,19 @@
 export {
+  buildGrantRequestBody,
+  type GnapClientKey,
+  type GnapGrantRequestBody,
+  type GnapGrantResponse,
+  grantUrlFromWsUrl,
+  issueOpenGrant,
+  parseGnapAuthorization,
+  parseGrantClientKey,
+  requestGnapAccessToken,
+  type VerifyGrantResult,
+  verifyGrantIncoming,
+  verifyGrantRequest,
+  WORKSTREAM_SESSION_ACCESS,
+} from "./gnap";
+export {
   type HeaderGetter,
   MESH_SIGNATURE_SKEW_SEC,
   type MeshIncomingRequest,
@@ -8,6 +23,12 @@ export {
   verifyHttpMessage,
   verifyRequest,
 } from "./http-signature";
+export {
+  type Ed25519PublicJwk,
+  multibaseFromPublicJwk,
+  parseEd25519PublicJwk,
+  publicJwkFromMeshKeypair,
+} from "./jwk";
 export {
   type SignJwsResult,
   signJws,
@@ -25,6 +46,13 @@ export {
   parseMeshKeyJson,
   publicKeyObject,
 } from "./keys";
+export {
+  type AccessTokenRecord,
+  defaultTokenStore,
+  type GnapAccess,
+  type IssuedAccessToken,
+  TokenStore,
+} from "./token";
 export {
   loadTrustFromEnv,
   lookupTrustedPublicKey,

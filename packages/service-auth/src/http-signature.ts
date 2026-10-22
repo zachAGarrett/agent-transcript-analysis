@@ -36,10 +36,14 @@ function queryComponent(url: URL): string {
   return url.search.length > 0 ? url.search : "?";
 }
 
-function coveredComponents(hasBody: boolean): string[] {
-  return hasBody
+function coveredComponents(hasBody: boolean, hasAuthorization: boolean): string[] {
+  const base = hasBody
     ? ["@method", "@path", "@query", "@authority", "content-digest", "content-type"]
     : ["@method", "@path", "@query", "@authority"];
+  if (hasAuthorization) {
+    return [...base, "authorization"];
+  }
+  return base;
 }
 
 function signatureParams(components: readonly string[], created: number, keyid: string): string {
@@ -107,7 +111,8 @@ export function signHttpMessage(input: {
       headers.set("content-type", "application/json");
     }
   }
-  const components = coveredComponents(body !== null);
+  const hasAuthorization = headers.has("authorization");
+  const components = coveredComponents(body !== null, hasAuthorization);
   const params = signatureParams(components, created, input.keypair.keyid);
   const base = signatureBase(components, params, url, input.method, headers);
   if (base === null) {
