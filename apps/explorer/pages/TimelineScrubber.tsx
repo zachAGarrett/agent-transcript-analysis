@@ -41,6 +41,8 @@ const HOLD_STEP_MS = 50;
 function useHoldStep(step: () => void) {
   const delay = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** True after pointerDown already stepped — suppress the following synthetic click. */
+  const pointerStepped = useRef(false);
   const stepRef = useRef(step);
   stepRef.current = step;
 
@@ -68,6 +70,7 @@ function useHoldStep(step: () => void) {
       if (e.button !== 0) return;
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
+      pointerStepped.current = true;
       stepRef.current();
       stop();
       delay.current = setTimeout(() => {
@@ -78,6 +81,14 @@ function useHoldStep(step: () => void) {
     onPointerUp: stop,
     onPointerCancel: stop,
     onLostPointerCapture: stop,
+    /** Keyboard (and any non-pointer) activation; skip if pointerDown already stepped. */
+    onClick: () => {
+      if (pointerStepped.current) {
+        pointerStepped.current = false;
+        return;
+      }
+      stepRef.current();
+    },
   };
 }
 
@@ -275,7 +286,6 @@ export function TimelineScrubber({ runId, onOpenPattern }: Props) {
               size="icon-sm"
               variant="ghost"
               disabled={cursor <= 0}
-              onClick={() => setCursor((c) => Math.max(0, c - 1))}
               aria-label="Previous frame"
               className="flex-shrink-0"
               {...holdPrev}
@@ -296,7 +306,6 @@ export function TimelineScrubber({ runId, onOpenPattern }: Props) {
               size="icon-sm"
               variant="ghost"
               disabled={cursor >= max}
-              onClick={() => setCursor((c) => Math.min(max, c + 1))}
               aria-label="Next frame"
               className="flex-shrink-0"
               {...holdNext}
