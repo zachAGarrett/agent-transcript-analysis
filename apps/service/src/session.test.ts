@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateMeshKeypair } from "@workstream/service-auth";
+import { defaultTokenStore, generateMeshKeypair, signHttpMessage } from "@workstream/service-auth";
 import { parseArgs } from "./cli";
 import { Emitter, type EmitterEvent } from "./emitter";
 import { defaultDataDir, startService } from "./server";
@@ -13,19 +13,24 @@ const server = startService({
   port: 0,
   hostname: "127.0.0.1",
   dataDir,
-  trustedKeys: { [emitterKp.keyid]: emitterKp.publicKey },
+  tokenStore: defaultTokenStore,
 });
 const base = `ws://${server.hostname}:${server.port}/ws`;
+const httpBase = `http://${server.hostname}:${server.port}`;
+
+beforeEach(() => {
+  defaultTokenStore.clear();
+});
 
 afterAll(() => {
   server.stop(true);
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-async function connect(onEvent?: (event: EmitterEvent) => void) {
+async function connect(onEvent?: (event: EmitterEvent) => void, keypair = emitterKp) {
   return Emitter.connect({
     url: base,
-    keypair: emitterKp,
+    keypair,
     requestTimeoutMs: 5_000,
     onEvent,
   });
@@ -180,8 +185,47 @@ describe("workstream service websocket auth", () => {
     }
   });
 
+  test("open GNAP grant for ephemeral keypair then connect", async () => {
+    const kp = generateMeshKeypair(`ephemeral-${crypto.randomUUID()}`);
+    const emitter = await connect(undefined, kp);
+    try {
+      const listed = await emitter.request({ op: "list" });
+      expect(listed).toMatchObject({ ok: true });
+    } finally {
+      emitter.close();
+    }
+  });
+
+  test("rejects upgrade with httpsig but no GNAP token", async () => {
+    const { headers } = signHttpMessage({
+      method: "GET",
+      url: `${httpBase}/ws`,
+      keypair: emitterKp,
+    });
+    const headerRecord: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      headerRecord[key] = value;
+    });
+    const BunWebSocket = WebSocket as unknown as {
+      new (url: string, init?: { headers?: Record<string, string> }): WebSocket;
+    };
+    const ws = new BunWebSocket(base, { headers: headerRecord });
+    const closed = await new Promise<boolean>((resolve) => {
+      ws.addEventListener("open", () => resolve(false));
+      ws.addEventListener("error", () => resolve(true));
+      ws.addEventListener("close", () => resolve(true));
+      setTimeout(() => resolve(true), 2000);
+    });
+    expect(closed).toBe(true);
+    try {
+      ws.close();
+    } catch {
+      /* already closed */
+    }
+  });
+
   test("health endpoint", async () => {
-    const res = await fetch(`http://${server.hostname}:${server.port}/health`);
+    const res = await fetch(`${httpBase}/health`);
     expect(res.ok).toBe(true);
     expect(await res.json()).toEqual({ ok: true });
   });

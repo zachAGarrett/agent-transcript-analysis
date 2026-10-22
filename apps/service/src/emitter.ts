@@ -1,5 +1,7 @@
 import {
+  grantUrlFromWsUrl,
   type MeshKeypair,
+  requestGnapAccessToken,
   signHttpMessage,
   signJws,
   type VerifyHttpMessageResult,
@@ -19,6 +21,8 @@ export type EmitterConnectOptions = {
   onEvent?: (event: EmitterEvent) => void;
   /** Per-request timeout in ms (default 30_000). */
   requestTimeoutMs?: number;
+  /** Override GNAP grant URL (default derived from `url` → `/gnap`). */
+  grantUrl?: string;
 };
 
 type Pending = {
@@ -42,12 +46,13 @@ function headersToRecord(headers: Headers): Record<string, string> {
 }
 
 /**
- * Signed WebSocket client: owns upgrade signing, JWS request frames, and reply demux.
+ * Signed WebSocket client: GNAP grant, upgrade signing, JWS frames, reply demux.
  * Stream `event` messages are delivered only via `onEvent` (no per-request correlation).
  */
 export class Emitter {
   readonly url: string;
   readonly keypair: MeshKeypair;
+  readonly accessToken: string;
   private ws: WebSocket;
   private onEvent?: (event: EmitterEvent) => void;
   private requestTimeoutMs: number;
@@ -57,12 +62,14 @@ export class Emitter {
   private constructor(
     url: string,
     keypair: MeshKeypair,
+    accessToken: string,
     ws: WebSocket,
     onEvent: ((event: EmitterEvent) => void) | undefined,
     requestTimeoutMs: number,
   ) {
     this.url = url;
     this.keypair = keypair;
+    this.accessToken = accessToken;
     this.ws = ws;
     this.onEvent = onEvent;
     this.requestTimeoutMs = requestTimeoutMs;
@@ -72,11 +79,18 @@ export class Emitter {
   }
 
   static async connect(options: EmitterConnectOptions): Promise<Emitter> {
+    const grantUrl = options.grantUrl ?? grantUrlFromWsUrl(options.url);
+    const accessToken = await requestGnapAccessToken({
+      grantUrl,
+      keypair: options.keypair,
+    });
+
     const httpUrl = toHttpUrl(options.url);
     const { headers } = signHttpMessage({
       method: "GET",
       url: httpUrl,
       keypair: options.keypair,
+      headers: new Headers({ authorization: `GNAP ${accessToken}` }),
     });
     // Bun's WebSocket accepts `{ headers }` for the upgrade; DOM typings do not.
     const BunWebSocket = WebSocket as unknown as {
@@ -108,6 +122,7 @@ export class Emitter {
     return new Emitter(
       options.url,
       options.keypair,
+      accessToken,
       ws,
       options.onEvent,
       options.requestTimeoutMs ?? 30_000,

@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import {
+  defaultTokenStore,
+  issueOpenGrant,
   loadOrCreateMeshKeypair,
-  loadTrustFromEnv,
-  lookupTrustedPublicKey,
-  resetTrustStore,
-  setTrustedPublicKeys,
+  parseGnapAuthorization,
+  verifyGrantIncoming,
   verifyJwsCompact,
   verifyRequest,
 } from "@workstream/service-auth";
@@ -19,6 +19,9 @@ import {
 
 export type SocketData = {
   session: SessionState;
+  /** Key bound to the GNAP access token used at upgrade. */
+  clientKeyid: string;
+  clientPublicKey: string;
 };
 
 const DEFAULT_PORT = Number(process.env.WORKSTREAM_SERVICE_PORT ?? 8787);
@@ -32,11 +35,8 @@ export type StartServiceOptions = {
   hostname?: string;
   /** Key material directory (default `.data/workstream`). */
   dataDir?: string;
-  /**
-   * When set, reset trust and use only these keys (tests).
-   * Keys are kid → multibase public key.
-   */
-  trustedKeys?: Record<string, string>;
+  /** Inject a token store (tests). Defaults to shared in-memory store. */
+  tokenStore?: typeof defaultTokenStore;
 };
 
 export function defaultDataDir(): string {
@@ -53,26 +53,10 @@ export function serviceKeyPath(dataDir = defaultDataDir()): string {
   return join(dataDir, "service-ed25519.json");
 }
 
-/** Boot mesh identity + trust store for emitters. */
-export function bootAuth(options?: {
-  dataDir?: string;
-  trustedKeys?: Record<string, string>;
-}): void {
+/** Boot service identity only (no static emitter trust). */
+export function bootAuth(options?: { dataDir?: string }): void {
   const dataDir = options?.dataDir ?? defaultDataDir();
   loadOrCreateMeshKeypair(serviceKeyPath(dataDir), "workstream-service");
-
-  if (options?.trustedKeys) {
-    resetTrustStore();
-    setTrustedPublicKeys(options.trustedKeys);
-    return;
-  }
-
-  resetTrustStore();
-  loadTrustFromEnv();
-  if (!lookupTrustedPublicKey("workstream-emitter")) {
-    const emitter = loadOrCreateMeshKeypair(emitterKeyPath(dataDir), "workstream-emitter");
-    setTrustedPublicKeys({ "workstream-emitter": emitter.publicKey });
-  }
 }
 
 function extractJws(raw: string): string | null {
@@ -90,10 +74,18 @@ function extractJws(raw: string): string | null {
   return null;
 }
 
+function jsonError(status: number, error: string): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 export function startService(options?: StartServiceOptions) {
   const port = options?.port ?? DEFAULT_PORT;
   const hostname = options?.hostname ?? DEFAULT_HOST;
-  bootAuth({ dataDir: options?.dataDir, trustedKeys: options?.trustedKeys });
+  const tokens = options?.tokenStore ?? defaultTokenStore;
+  bootAuth({ dataDir: options?.dataDir });
 
   const server = Bun.serve<SocketData>({
     port,
@@ -103,21 +95,48 @@ export function startService(options?: StartServiceOptions) {
       if (url.pathname === "/health") {
         return Response.json({ ok: true });
       }
+
+      if (url.pathname === "/gnap" && req.method === "POST") {
+        const verified = await verifyGrantIncoming(req);
+        if (!verified.ok) {
+          return jsonError(401, verified.error);
+        }
+        const grant = issueOpenGrant(verified, tokens);
+        return Response.json(grant);
+      }
+
       if (url.pathname !== "/ws") {
         return new Response("Not found", { status: 404 });
       }
 
-      const verified = await verifyRequest(req, lookupTrustedPublicKey);
+      const tokenValue = parseGnapAuthorization(req.headers.get("authorization"));
+      if (tokenValue === null) {
+        return jsonError(401, "missing GNAP authorization");
+      }
+      const record = tokens.lookup(tokenValue);
+      if (!record) {
+        return jsonError(401, "invalid or expired access token");
+      }
+
+      const verified = await verifyRequest(req, (keyid) =>
+        keyid === record.keyid ? record.publicKey : undefined,
+      );
       if (!verified.ok) {
-        return new Response(JSON.stringify({ error: verified.error }), {
-          status: 401,
-          headers: { "content-type": "application/json" },
-        });
+        return jsonError(401, verified.error);
+      }
+      if (verified.keyid !== record.keyid) {
+        return jsonError(401, "signature keyid does not match token");
       }
 
       return upgradeMutex(async () => {
         const session = createSessionState();
-        const upgraded = server.upgrade(req, { data: { session } });
+        const upgraded = server.upgrade(req, {
+          data: {
+            session,
+            clientKeyid: record.keyid,
+            clientPublicKey: record.publicKey,
+          },
+        });
         if (!upgraded) {
           return new Response("WebSocket upgrade failed", { status: 400 });
         }
@@ -136,7 +155,10 @@ export function startService(options?: StartServiceOptions) {
           return;
         }
 
-        const verified = verifyJwsCompact(jws, lookupTrustedPublicKey);
+        const { clientKeyid, clientPublicKey } = ws.data;
+        const verified = verifyJwsCompact(jws, (keyid) =>
+          keyid === clientKeyid ? clientPublicKey : undefined,
+        );
         if (!verified.ok) {
           ws.send(JSON.stringify({ id: "?", ok: false, error: verified.error }));
           return;
