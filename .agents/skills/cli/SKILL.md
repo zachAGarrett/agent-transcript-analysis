@@ -30,8 +30,9 @@ bun run service:cli -- run '[{"op":"createLattice","persistence":{"kind":"memory
 ```
 
 Default URL: `ws://127.0.0.1:8787/ws` (`WORKSTREAM_SERVICE_URL` / `--url`).
-`service:emit` is the example **Emitter** (signed upgrade + JWS frames, synthetic symbols).
-Clients must use `Emitter` (or equivalent signing); unsigned WS upgrades are rejected.
+`service:emit` is the example **Emitter** (GNAP grant → signed upgrade + JWS frames).
+Clients must use `Emitter` (or equivalent grant + signing); upgrades without a
+GNAP token are rejected.
 
 ## Doc map
 
@@ -45,7 +46,8 @@ Clients must use `Emitter` (or equivalent signing); unsigned WS upgrades are rej
 ## Operator rules
 
 1. One logical session per WebSocket — use `run` / `Emitter` for multi-step management.
-2. Upgrade is RFC 9421-signed; each client frame is EdDSA JWS (`@workstream/service-auth`).
+2. Flow: `POST /gnap` (httpsig + embedded key) → `/ws` with `Authorization: GNAP`
+   + httpsig → EdDSA JWS frames (`@workstream/service-auth`). Open M2M policy in v1.
 3. Default preprocess accepts string symbols or `{ "symbol": "…" }`.
 4. Shared-lattice writes stay under `LatticeRef.runExclusive`; the upgrade mutex
    only serializes connection accept / registry churn.

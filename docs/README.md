@@ -19,4 +19,6 @@ when changing these pages.
 ## Architecture decisions
 
 Workstream-scoped ADRs live under `.data/agent-review/workstreams/<id>/adr.md` while a
-workstream is active. Project-level ADRs (when added) live in [`adr/`](adr/).
+workstream is active. Project-level ADRs live in [`adr/`](adr/).
+
+- [ADR 0001: Thin colocated GNAP M2M for service auth](adr/0001-gnap-m2m-service-auth.md)

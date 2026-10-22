@@ -13,24 +13,28 @@ Health check: `GET /health` (unsigned).
 
 ## Auth
 
-Client→server traffic is authenticated with `@workstream/service-auth`:
+Client→server traffic uses a thin GNAP (RFC 9635) M2M profile in
+`@workstream/service-auth` (see [ADR 0001](../adr/0001-gnap-m2m-service-auth.md)):
 
 | Hop | Mechanism |
 | --- | --- |
-| HTTP upgrade to `/ws` | RFC 9421 HTTP Message Signatures (ed25519) |
-| Each client WS frame | EdDSA JWS Compact over the JSON `ClientRequest` |
+| `POST /gnap` | RFC 9421 httpsig over grant body with embedded `client.key` (open policy) |
+| HTTP upgrade to `/ws` | `Authorization: GNAP <token>` + RFC 9421 httpsig (key-bound token) |
+| Each client WS frame | EdDSA JWS Compact over the JSON `ClientRequest` (session-bound key) |
 
-Unsigned upgrades get `401`. Unsigned frames are rejected.
+Missing/invalid grant or upgrade credentials get `401`. Unsigned frames are rejected.
 
-Keys default under `.data/workstream/`:
+v1 policy is **open**: any client that proves control of an Ed25519 key receives
+a short-lived key-bound access token. No static emitter allowlist.
+
+Keys under `.data/workstream/` (optional local convenience):
 
 - `service-ed25519.json` — service identity
-- `emitter-ed25519.json` — shared local emitter key (auto-trusted as `workstream-emitter` when env trust is empty)
+- `emitter-ed25519.json` — local CLI / emit-example private key (not auto-trusted)
 
-Override trust with `WORKSTREAM_EMITTER_PUBLIC_KEY` (multibase `u…`) or
-`WORKSTREAM_MESH_PUBLIC_KEYS` (`{"kid":"u…"}` JSON).
-
-Clients should use the `Emitter` class ([`apps/service/src/emitter.ts`](../../apps/service/src/emitter.ts)), which owns upgrade signing, JWS frames, and reply demux.
+Clients should use the `Emitter` class
+([`apps/service/src/emitter.ts`](../../apps/service/src/emitter.ts)), which owns
+GNAP grant, upgrade signing, JWS frames, and reply demux.
 
 ## Management CLI
 

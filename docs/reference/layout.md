@@ -7,7 +7,7 @@ Reference for repository paths used by the host package, Bun service, and explor
 | Path | Role |
 | --- | --- |
 | `packages/host` | `@workstream/host` — lattice/stream contracts + kernels |
-| `packages/service-auth` | `@workstream/service-auth` — Ed25519 JWS + RFC 9421 mesh crypto |
+| `packages/service-auth` | `@workstream/service-auth` — Ed25519 JWS, RFC 9421, thin GNAP M2M |
 | `apps/service` | Bun WebSocket host + Emitter / management CLI |
 | `apps/explorer` | `@workstream/explorer` — Lattice / Connectivity / Replay UI |
 | `api/` | Optional host helpers (e.g. Jev classifiers) |
@@ -41,13 +41,15 @@ writes via `LatticeRef.runExclusive`.
 
 ```text
 apps/service/src/
-  server.ts          # Bun.serve + upgrade mutex + /ws
+  server.ts          # Bun.serve + POST /gnap + /ws upgrade mutex
   session.ts         # per-socket lattice/stream registry
+  emitter.ts         # GNAP grant + signed WS client
   cli.ts             # management CLI (WS client)
 ```
 
-One logical session per socket. Control/data plane is persistent WebSocket JSON
-(not REST). Start with `bun run service`; manage with `bun run service:cli`.
+One logical session per socket. Clients obtain a GNAP access token at `/gnap`,
+then upgrade `/ws` with that token. Start with `bun run service`; manage with
+`bun run service:cli`.
 
 ## Runtime job directories
 
