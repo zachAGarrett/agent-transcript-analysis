@@ -6,6 +6,7 @@ import {
   formatPatternChain,
   patternDisplayLabel,
 } from "@/app/adapters/decode";
+import { ScrollFade } from "@/app/components/ScrollFade";
 import { VisualizationCard } from "@/app/components/VisualizationCard";
 import type { PatternDetail as PatternDetailData, PatternNeighbor, Run } from "@/app/viz";
 import { Badge } from "@/components/ui/badge";
@@ -154,16 +155,16 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-3">
-                    <div className="scroll-fade max-h-40 overflow-y-auto">
-                      <div className="space-y-3 pr-1">
+                    <ScrollFade className="max-h-40">
+                      <div className="space-y-3 pr-1 pb-1">
                         {steps.map((step, i) => (
                           <div key={step.full}>
                             {steps.length > 1 ? (
-                              <p className="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+                              <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">
                                 Step {i + 1}
                               </p>
                             ) : null}
-                            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+                            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
                               {step.atoms.length ? (
                                 step.atoms.map((atom) => (
                                   <FragmentPair
@@ -182,7 +183,7 @@ export function PatternDetail({ runId, nodeId, version, onClose, onOpenNeighbor 
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </ScrollFade>
                   </CollapsibleContent>
                 </Collapsible>
               ) : null}
@@ -240,8 +241,8 @@ function NeighborColumn({
         </VisualizationCard.Action>
       </VisualizationCard.Header>
       <VisualizationCard.Content>
-        <div className="scroll-fade max-h-40 overflow-y-auto">
-          <div className="flex flex-col gap-0.5 pr-1">
+        <ScrollFade className="max-h-40">
+          <div className="flex flex-col gap-0.5 pr-1 pb-1">
             {group.rows.length ? (
               group.rows.map((row) => (
                 <Tooltip key={row.id}>
@@ -274,7 +275,7 @@ function NeighborColumn({
               <p className="text-muted-foreground px-2 py-1 text-xs">No links.</p>
             )}
           </div>
-        </div>
+        </ScrollFade>
       </VisualizationCard.Content>
     </VisualizationCard>
   );

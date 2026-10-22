@@ -1,6 +1,7 @@
 import { ChevronRightIcon, DatabaseIcon, RefreshCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContractInspect, RunCharts } from "@/app/components/RunCharts";
+import { ScrollFade } from "@/app/components/ScrollFade";
 import {
   createExplorerSession,
   type ExplorerSession,
@@ -318,7 +319,7 @@ export function Explorer() {
                 <TooltipContent>Reload run databases</TooltipContent>
               </Tooltip>
             </div>
-            <div className="scroll-fade h-[min(60vh,520px)] overflow-y-auto">
+            <ScrollFade className="h-[min(60vh,520px)]">
               <div id="runs" className="flex flex-col gap-2 py-3 pr-1">
                 {runs.length ? (
                   runs.map((run, i) => (
@@ -364,7 +365,7 @@ export function Explorer() {
                   </Empty>
                 )}
               </div>
-            </div>
+            </ScrollFade>
           </aside>
 
           <section className="min-w-0">

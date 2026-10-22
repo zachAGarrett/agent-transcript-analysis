@@ -127,20 +127,23 @@
   }
 }
 
-/** Soft edge fade for capped overflow-y scroll regions (runs list, pattern neighbors, tags). */
+/**
+ * Soft edge fade for capped overflow-y scroll regions.
+ * Prefer via `ScrollFade` so it only applies when content overflows.
+ */
 @utility scroll-fade {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent,
-    #000 0.75rem,
-    #000 calc(100% - 0.75rem),
+    #000 0.5rem,
+    #000 calc(100% - 0.5rem),
     transparent
   );
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    #000 0.75rem,
-    #000 calc(100% - 0.75rem),
+    #000 0.5rem,
+    #000 calc(100% - 0.5rem),
     transparent
   );
 }
